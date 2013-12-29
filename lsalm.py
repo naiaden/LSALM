@@ -15,40 +15,49 @@ class LsaLM:
     minCosCache = {}
     corpusCounts = {}
     LSAconfCacheNoms = {}
+    contextCentroids = {}
     
     verbosity = int(0)
     
     distributed = False
     mmfile = 'markovmarket'
     dictfile = 'dictionary'
+    normfile = ''
     gamma = float(7.0)
     dimensions = 150
     trainFile = ''
     saveLSIFile = ''
     readLSIFile = ''
     outputFile = ''
+    readContextsFile = ''
+    writeContextsFile = ''
     readWordCountFile = ''
     writeWordCountFile = ''
     readLSAConfFile = ''
     writeLSAConfFile = ''
+
+    evaluatePart = int(0)
    
     @staticmethod 
     def printHelp():
-        print("-h                   print this text and exit")
-        print("-p, --distributed    use the distributed version of gensim")
-        print("-m, --mfile f        read corpus file from f (in matrix market format)")
-        print("-d, --dfile f        read dictionary from f")
-        print("-g, --gamma n        gamma parameter for dynamic range scaling (default=7.0)")
-        print("-k, --dimensions n   the number of dimensions after SVD (default=150)")
-        print("-t, --train f        read lines to apply trained model on")
-        print("-w, --write f        write LSA model to file f")
-        print("-r, --read f         read LSA from file f")
-        print("-s, --save f         save output (probability and lsa confidence) to file f")
-        print("-c, --readcount f    read word count file from f")
-        print("-C, --writecount f   write word count to file f")
-        print("-l, --readlsaconf f  read lsa confidence values from f")
-        print("-L, --writelsaconf f write lsa condifence values to f")
-        print("-v, --verbosity n    set verbosity level (default=0)")    
+        print("-h, --help            print this text and exit")
+        print("-p, --distributed     use the distributed version of gensim")
+        print("-m, --mfile f         read corpus file from f (in matrix market format)")
+        print("-x, --readcontexts f  read contexts from f")
+        print("-X, --writecontexts f write contexts to f")
+        print("-d, --dfile f         read dictionary from f")
+        print("-g, --gamma n         gamma parameter for dynamic range scaling (default=7.0)")
+        print("-k, --dimensions n    the number of dimensions after SVD (default=150)")
+        print("-t, --train f         read lines to apply trained model on")
+        print("-w, --write f         write LSA model to file f")
+        print("-r, --read f          read LSA from file f")
+        print("-s, --save f          save output (probability and lsa confidence) to file f")
+        print("-c, --readcount f     read word count file from f")
+        print("-C, --writecount f    write word count to file f")
+        print("-l, --readlsaconf f   read lsa confidence values from f")
+        print("-L, --writelsaconf f  write lsa condifence values to f")
+        print("-e, --evaluatepart n  evaluate subset n (of 100), all=-1 (default=-1)")
+        print("-v, --verbosity n     set verbosity level (default=0)")    
     
     
     # The cosine is computed between the LSA vector for word w and the centroid C
@@ -162,19 +171,23 @@ class LsaLM:
 
     def __init__(self, cmdArgs):
         try:
-            opts, args = getopt.getopt(cmdArgs, 'hpm:d:g:k:t:w:r:s:v:c:C:l:L:', ['help', 'distributed', 'mfile=', 'dfile=', 'gamma=', 'dimensions=','train=', 'write=', 'read=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=' ])
+            opts, args = getopt.getopt(cmdArgs, 'hpm:x:X:d:g:k:t:w:r:s:v:c:C:l:L:e:', ['help', 'distributed', 'mfile=', 'readcontexts=', 'writecontexts', 'dfile=', 'gamma=', 'dimensions=','train=', 'write=', 'read=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'evaluatepart=' ])
         except getopt.GetoptError:
             LsaLM.printHelp()
             sys.exit(2)
         
         for (opt, arg) in opts:
-            if opt == '-h':
+            if opt in('-h', '--help'):
                 LsaLM.printHelp()
                 sys.exit()
             elif opt in('-p', '--distributed'):
                 self.distributed = True
             elif opt in ('-m', '--mfile'):
                 self.mmfile = arg
+            elif opt in ('-x', '--readcontexts'):
+                self.readContextsFile = arg
+            elif opt in ('-X', '--writecontexts'):
+                self.writeContextsFile = arg
             elif opt in ('-d', '--dfile'):
                 self.dictfile = arg
             elif opt in ('-g', '--gamma'):
@@ -197,18 +210,27 @@ class LsaLM:
                 self.writeWordCountFile = arg
             elif opt in ('-l', '--readlsaconf'):
                 self.readLSAConfFile = arg
+            elif opt in ('-e', '--evaluatepart'):
+                self.evaluatePart = int(arg)
             elif opt in ('-L', '--writelsaconf'):
                 self.writeLSAConfFile = arg
         
         self.condPrint(2, "Corpus file: %s" % self.mmfile)
         self.condPrint(2, "Distributed: %s" % ("Yes" if self.distributed else "No"))
         self.condPrint(2, "Dictionary file: %s" % self.dictfile)
+        self.condPrint(2, "Read contexts from: %s" % self.readContextsFile)
+        self.condPrint(2, "Write contexts to: %s" % self.writeContextsFile)
+        self.condPrint(2, "Read word counts from: %s" % self.readWordCountFile)
+        self.condPrint(2, "Write word counts to: %s" % self.writeWordCountFile)
+        self.condPrint(2, "Read LSA confidence values from: %s" % self.readLSAConfFile)
+        self.condPrint(2, "Write LSA confidence values to: %s" % self.writeLSAConfFile)
         self.condPrint(2, "Gamma: %f" % self.gamma)
         self.condPrint(2, "Dimensions: %s" % self.dimensions)
         self.condPrint(2, "Evaluate on: %s" % self.trainFile)
         self.condPrint(2, "Save LSA in: %s" % self.saveLSIFile)
         self.condPrint(2, "Read LSA from: %s" % self.readLSIFile)
         self.condPrint(2, "Write output to: %s" % self.outputFile)
+        self.condPrint(2, "Evaluate only part: %s" % self.evaluatePart)
         self.condPrint(2, "Verbosity level: %s" % self.verbosity)
 
     def buildSpace(self):
