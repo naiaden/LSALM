@@ -17,7 +17,7 @@ vocabularyInputFile = ''
 
 countOutputDirectory = './counts'
 
-order = int(1)
+order = 1
 
 nrInputFiles = int(0)
 nrTrainInstances = int(0)
@@ -29,6 +29,7 @@ generateCountsFor = []
 def printHelp():
     print("-h                 print this help and exit")
     print("-o, --order n      order of the n-gram language model (currently only n=1 is implemented)")
+    print("                   order can also be n, to only create sentence histories (each line contains n words)")
     print("-m, --mfile f      save the corpus file in f (in matrix market format)")
     print("-d, --dfile f      save the dictionary in f")
     print("-e, --efile f      save the dictionary as an evaluation file")
@@ -86,8 +87,15 @@ def createEvaluationFile():
                     if len(ngram.split()) == order:
                         eof.write("%s\n" % ngram)
 
-    print("-e, --efile f      save the dictionary as an evaluation file")
-    print("-E, --evaluateonly only save the evaluation file")
+def createSentenceHistories():
+    with open(evaluationOutputFile, 'w') as eof:
+        for inputFile in generateCountsFor:
+            with open(inputFile, 'r') as f:
+                for line in f:
+                    words = line.rstrip().split()
+                    for i in range(len(words)):
+                        eof.write("%s\n" % ' '.join(words[0:1+i]))
+                
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], 'ho:m:d:e:EV:l:c:C:v:', ['help', 'order=', 'mfile=', 'dfile=', 'efile=', 'evaluateonly', 'vocabulary=', 'files=', 'counts=', 'countsdir=', 'verbose=' ])
@@ -100,7 +108,7 @@ for (opt, arg) in opts:
         printHelp()
         sys.exit()
     elif opt in ('-o', '--order'):
-        order = int(arg)
+        order = arg
     elif opt in ('-m', '--mfile'):
         corpusOutputFile = arg
     elif opt in ('-d', '--dfile'):
@@ -126,7 +134,7 @@ for (opt, arg) in opts:
 
 ### Generate count files ########################
 
-if len(generateCountsFor):
+if len(generateCountsFor) and isinstance(order, (int, long)):
     condPrint(2, " > Generating %d count files" % len(generateCountsFor))
     countStart = time.time()
     for line in generateCountsFor:
@@ -135,18 +143,22 @@ if len(generateCountsFor):
 
 ### Output parameters ###########################
 
-condPrint(2, "-- Order: %d" % order)
+condPrint(2, "-- Order: %s" % order)
 condPrint(2, "-- Dictionary file: %s" % dictionaryOutputFile)
 condPrint(2, "-- Corpus file: %s" % corpusOutputFile)
 condPrint(2, "-- Vocabulary file: %s" % vocabularyInputFile)
 condPrint(2, "-- Counts directory: %s" % countOutputDirectory)
-condPrint(2, "-- Number of input files: %d" % len(inputFiles))
+condPrint(2, "-- Number of input files: %d" % len(generateCountsFor))
+condPrint(2, "-- Number of input files to process: %d" % len(inputFiles))
 condPrint(2, "-- Verbosity level: %d" % verbosity)
 
 ### Evaluation output ###########################
 
 if evaluationOutputFile:
-    createEvaluationFile()
+    if order == 'n':
+        createSentenceHistories()
+    else:
+        createEvaluationFile()
 
     if evaluateonly:
         sys.exit()
