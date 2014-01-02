@@ -73,6 +73,7 @@ class LsaLM:
         print("-T, --thousand             divide task in 1000 pieces, rather than the default 100")
         print("-e, --evaluatepart n       evaluate subset n (of 100, unless -T), all=-1 (default=-1)")
         print("-v, --verbosity n          set verbosity level (default=0)")    
+        print("                           (0=normal, 1=general, 2=steps, 3=time, 4=specific, 5=everything)")
     
     
     # The cosine is computed between the LSA vector for word w and the centroid C

@@ -64,30 +64,22 @@ class LsaLMN3(LsaLM):
             self.condPrint(PrintLevel.TIME, " - Took %f seconds" % (time.time() - cWriteStart))
             self.condPrint(PrintLevel.STEPS, "<  Done writing contexts to file")
 
-    def evaluateForContext(self, context):
+    def evaluateWordForContext(self, context, focusWord):
+        wordStart = time.time()
+        centroid = self.contextCentroids[context]
 
-        for focusWordId in self.id2word:
-            wordStart = time.time()
-            centroid = self.contextCentroids[context]
-     
-            focusWord = self.id2word[focusWordId]
-            focusWordListForm = focusWord.split(None, 1)
-            focusTuple = self.id2word.doc2bow(focusWordListForm)
-    
-            if focusTuple:
-                focusId = focusTuple[0][0]
-                focusProjection = self.lsi.projection.u[focusId]
-    
-                PLvalue = self.PL(focusProjection,centroid,)
-                lc = self.getPrecachedLSAConf(focusId)
-                leftContext, rightContext = context.split('\t') 
-                leftContextWords = leftContext.split()
-                outputString = "%.16f\t%s %s %s\t%.16f" % (PLvalue, leftContextWords[0], leftContextWords[1], focusWord, lc)
-                if self.outputFile:
-                    self.of.write(outputString + "\n")
-                else:
-                    print(outputString)
-            self.condPrint(PrintLevel.EVERYTHING, "        %s in %f" % (focusWord, time.time() - wordStart))
+        focusWordListForm = focusWord.split(None, 1)
+        focusTuple = self.id2word.doc2bow(focusWordListForm)
+
+        if focusTuple:
+            focusId = focusTuple[0][0]
+            focusProjection = self.lsi.projection.u[focusId]
+
+            PLvalue = self.PL(focusProjection,centroid,)
+            lc = self.getPrecachedLSAConf(focusId)
+            return (PLvalue, "%s %s %s" % (leftContext, focusWord, rightContext), lc)
+        self.condPrint(PrintLevel.EVERYTHING, "        %s in %f" % (focusWord, time.time() - wordStart))
+        return None    
 
     def evaluate(self):
         self.readContexts()
@@ -102,21 +94,48 @@ class LsaLMN3(LsaLM):
                 evaluateF = 0
                 evaluateT = len(self.contextCentroids)
 
-            partStart = time.time()
-            partNumber = 0
-            for contextId,context in enumerate(self.contextCentroids):
-                if evaluateF < contextId <= evaluateT:
-                    self.condPrint(PrintLevel.SPECIFIC, "   > Starting context %d: %s" % (contextId, context))
-                    cStart = time.time()
-                    self.evaluateForContext(context) 
-                    cDelta = time.time() - cStart
-                    self.condPrint(PrintLevel.SPECIFIC, "   - Took %f seconds (avg: %f)" % (cDelta, cDelta/len(self.id2word)))
-                    self.condPrint(PrintLevel.SPECIFIC, "   < Done with context %d: %s" % (contextId, context)) 
+            if self.trainFile:
+                with open(self.trainFile, 'r') as f:
 
-                    partNumber += 1
-                    if not partNumber % 100:
-                        self.condPrint(PrintLevel.TIME, "   | part %d: avg %f" % (partNumber, (time.time() - partStart)/100))
-                        partStart = time.time()
+                    partStart = time.time()
+                    partNumber = 0
+                    for contextId,context in enumerate(self.contextCentroids):
+                        if evaluateF < contextId <= evaluateT:
+                            contextSum = 0
+
+                            self.condPrint(PrintLevel.SPECIFIC, "   > Starting context %d: %s" % (contextId, context))
+                            cStart = time.time()
+
+                            self.condPrint(PrintLevel.SPECIFIC, "  -- Computing normalisation sum over contexts")
+                            for focusWordId in self.id2word:
+                                result = self.evaluateWordForContext(context, self.id2word[focusWordId) 
+                                if result:
+                                    (p, c, l) = result
+                                    contextSum += p
+                            self.condPrint(PrintLevel.SPECIFIC, "   : Normalisation sum is %f" % contextSum)                  
+ 
+                            self.condPrint(PrintLevel.SPECIFIC, "  -- Computing probability per word")
+                            for line in f:
+                                focusword = line.rstrip().split()[-1]
+                                
+                                result = self.evaluateWordForContext(context, focusWord)
+                                if result:
+                                    (p, c, l) = result
+                                    outputString = "%.16f\t%s %s %s\t%.16f" % (p, c, l, contextSum)
+
+                                    if self.outputFile:
+                                        self.of.write("%s\n" % outputString)
+                                    else:
+                                        print(outputString)
+
+                            cDelta = time.time() - cStart
+                            self.condPrint(PrintLevel.SPECIFIC, "   - Took %f seconds (avg: %f)" % (cDelta, cDelta/len(self.id2word)))
+                            self.condPrint(PrintLevel.SPECIFIC, "   < Done with context %d: %s" % (contextId, context)) 
+
+                            partNumber += 1
+                            if not partNumber % 100:
+                                self.condPrint(PrintLevel.TIME, "   | part %d: avg %f" % (partNumber, (time.time() - partStart)/100))
+                                partStart = time.time()
         
 
 
