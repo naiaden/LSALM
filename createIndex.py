@@ -134,7 +134,12 @@ for (opt, arg) in opts:
 
 ### Generate count files ########################
 
-if len(generateCountsFor) and isinstance(order, (int, long)):
+if isinstance(int(order), (int, long)):
+    print "isint"
+else:
+    print "notint"
+
+if len(generateCountsFor) and order.isdigit():
     condPrint(2, " > Generating %d count files" % len(generateCountsFor))
     countStart = time.time()
     for line in generateCountsFor:
@@ -148,34 +153,42 @@ condPrint(2, "-- Dictionary file: %s" % dictionaryOutputFile)
 condPrint(2, "-- Corpus file: %s" % corpusOutputFile)
 condPrint(2, "-- Vocabulary file: %s" % vocabularyInputFile)
 condPrint(2, "-- Counts directory: %s" % countOutputDirectory)
-condPrint(2, "-- Number of input files: %d" % len(generateCountsFor))
-condPrint(2, "-- Number of input files to process: %d" % len(inputFiles))
+condPrint(2, "-- Number of input files: %d" % len(inputFiles))
+condPrint(2, "-- Number of input files to process: %d" % len(generateCountsFor))
 condPrint(2, "-- Verbosity level: %d" % verbosity)
 
 ### Evaluation output ###########################
 
 if evaluationOutputFile:
+    condPrint(2, ">  Processing evaluation output file")
     if order == 'n':
+        condPrint(2, " - Creating sentence histories")
         createSentenceHistories()
     else:
+        condPrint(2, " - Creating evaluation file")
         createEvaluationFile()
+    condPrint(2, "<  Done processing evaluation output file")
 
     if evaluateonly:
+        condPrint(2, "-- Evaluate only mode enabled. Done")
         sys.exit()
+else:
+    condPrint(2, "-- Skipping evaluation output")
 
 ### Vocabulary ##################################
 
+condPrint(2, "-- Processing vocabulary")
+vocabStart = time.time()
 if vocabularyInputFile:
-    condPrint(2, " > Reading vocabulary")
-    vocabStart = time.time()
+    condPrint(2, ">  Reading vocabulary")
     readVocabularyAsDictionary()
     nrTrainInstances = countTrainInstances()
-    condPrint(5, " < Done reading %d words vocabulary in %f" % (len(dictionary), time.time() - vocabStart))
 else:
-    condPrint(2, " > Creating dictionary with open vocabulary")
+    condPrint(2, ">  Creating dictionary with open vocabulary")
     dictStart = time.time()
     nrTrainInstances = createOpenDictionary()
-    condPrint(5, " < Done creating dictionary with %d words in %f" % (len(dictionary), time.time() - dictStart))
+condPrint(4, " - Processed dictionary/vocabulary in %f seconds" % (time.time() - vocabStart))
+condPrint(2, "<  Processed dictionary/vocabulary with %d words" % len(dictionary))
 
 ###
 
@@ -184,7 +197,7 @@ dictionaryCounts = [0] * len(dictionary)
 ### Corpus output ###############################
 
 if corpusOutputFile:
-    condPrint(2, " > Writing corpus to %s" % (corpusOutputFile)) 
+    condPrint(2, ">  Writing corpus to %s" % (corpusOutputFile)) 
     cofStart = time.time()
     cof = open(corpusOutputFile, 'w')
     
@@ -206,15 +219,17 @@ if corpusOutputFile:
                     cof.write("%d %d %d\n" % (fileNumber, dictionary[word], int(value)))
             fileNumber += 1
     cof.close()
-    condPrint(5, " < Done writing corpus in %f" % (time.time() - cofStart))
+    condPrint(4, " - Done writing corpus in %f seconds" % (time.time() - cofStart))
+    condPrint(5, "<  Done writing corpus")
 
 ### Dictionary output ##########################
 
 if dictionaryOutputFile:
-    condPrint(2, " > Writing dictionary to %s" % (dictionaryOutputFile))
+    condPrint(2, ">  Writing dictionary to %s" % (dictionaryOutputFile))
     dofStart = time.time()
     dof = open(dictionaryOutputFile, 'w')
     for key in dictionary:
         dof.write("%d\t%s\t%d\n" % (dictionary[key], key, dictionaryCounts[dictionary[key]-1]))
     dof.close()
-    condPrint(5, " < Done writing dictionary in %f" % (time.time() - dofStart))
+    condPrint(4, " - Wrote dictionary in %f seconds" % (time.time() - dofStart))
+    condPrint(5, "<  Done writing dictionary")

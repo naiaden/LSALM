@@ -10,9 +10,16 @@ import getopt
 import time
 import pickle
 from time import gmtime, strftime
+from colorama import init, Fore, Back, Style
 
 class PrintLevel:
     (NORMAL, GENERAL, STEPS, TIME, SPECIFIC, EVERYTHING) = range(0, 6)
+
+class InvalidValueError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
 
 class LsaLM:
 
@@ -22,6 +29,8 @@ class LsaLM:
     LSAconfCacheNoms = {}
     contextCentroids = {}
     normalisationCache = {}
+    PLestCache = {}
+    PLestSum = 0
     
     verbosity = int(0)
     programIdentifier = ''
@@ -75,127 +84,113 @@ class LsaLM:
         print("-v, --verbosity n          set verbosity level (default=0)")    
         print("                           (0=normal, 1=general, 2=steps, 3=time, 4=specific, 5=everything)")
     
-    
-    # The cosine is computed between the LSA vector for word w and the centroid C
-    @staticmethod
-    def cos(w,C):
+    # Returns the cosine between a word and a context.
+    # The result can range from -1 to 1.
+    # Throws an InvalidValueError if the number goes NaN
+    def cos(self,wordId,context):
+        w = self.lsi.projection.u[wordId]
+        C = self.contextCentroids[context]
+
         nom = numpy.dot(w,C)
         det1 = numpy.linalg.norm(w)
         det2 = numpy.linalg.norm(C)
         if math.isnan(nom) or math.isnan(det1) or math.isnan(det2) or det1 == 0 or det2 == 0 or nom == 0:
             return 0
+        if det1*det2 <= 0:
+            raise InvalidValueError(Fore.RED + "The normalisation of the cos function shouldn't be <= 0!\nValue: %f\nWord: %s\nContext: %s" % (det1*det2, self.id2word[wordId], context))
+        # FORMULA (2)
         val = nom/(det1*det2)
         return 0 if math.isnan(val) else val
     
-    # Finds the smallest cosine between the context C and anyword W_j which ranges over the N vocabulary items
-    # Returns a triple with the id of the smallest cosine distance, the smallest cosine distance, and the sum of all distances
-    def MinCos(self,C):
+    def MinCos(self,context):
         minVal = 0
         minId = 0
         cosSum = 0
-        for id in self.id2word:
-            val = LsaLM.cos(self.lsi.projection.u[id], C)
-            cosSum = cosSum + val
+        for wId in self.id2word:
+            val = self.cos(wId, context)
+            cosSum += val
+            # FORMULA (3)
             if(val < minVal):
                 minVal = val
-                minId = id
-        plDen = pow((cosSum - minVal), self.gamma)
+                minId = wId
+            
+        plDen = cosSum - len(self.id2word) * minVal
         return (minId, minVal, cosSum, plDen)
     
-    def getCachedMinCos(self,C):
-        Cstring = C.tostring()
-        if Cstring in self.minCosCache:
-            return self.minCosCache[Cstring]
+    def getCachedMinCos(self,context):
+        if context in self.minCosCache:
+            return self.minCosCache[context]
         else:
-            mincos = self.MinCos(C)
-            self.minCosCache[Cstring] = mincos
+            mincos = self.MinCos(context)
+            self.minCosCache[context] = mincos
             return mincos
 
-    def getCachedNormalisation(self,C):
-        Cstring = C.tostring()
-        if Cstring in self.normalisationCache:
-            return self.normalisationCache[Cstring]
+    def getCachedNormalisation(self,context):
+        if context in self.normalisationCache:
+            return self.normalisationCache[context]
         else:
             normalisation = 0
-            for word in self.id2word:
-                normalisation += LsaLM.cos(self.lsi.projection.u[word],C)
-            self.normalisationCache[Cstring] = normalisation
+            for wId in self.id2word:
+                normalisation += self.cos(wId,context)
+            self.normalisationCache[context] = normalisation
             return normalisation
-    
-    # Compresses PLest and PL, since MinCos doesn't have to be computed each time in PL
-    def PL(self,iProjection,C):
-        (minId, minVal, cosSum, plDen) = self.getCachedMinCos(C)
-    
-        nom = (LsaLM.cos(iProjection,C) - minVal) / plDen
-        den = self.getCachedNormalisation(C) - len(self.id2word)*minVal;
-        return nom/(den/plDen)
-    
-    def getWordCountById(self,id,corpus):
-        if id in self.corpusCounts:
-            return self.corpusCounts[id]
+   
+    def getCachedPLest(self,wordId,context):
+        comboString = ("%d %s" % (wordId, context))
+        if comboString in self.PLestCache:
+            return self.PLestCache[comboString]
         else:
-            return 0
+            (minId, minVal, cosSum, plDen) = self.getCachedMinCos(context)
+            wordCos = self.cos(wordId, context)
+            if wordCos < minVal:
+                raise InvalidValueError(Fore.RED + "Word cosine in a context cannot be smaller than the smallest value in the context!\ncosine value (and smallest): %f (%f)\nWord: %s\nContext: %s" % (wordCos, minVal, self.id2word[wordId], context))
+            # FORMULA (4)
+            PLest = (wordCos - minVal) / plDen
+            if PLest < 0:
+                self.condPrint(PrintLevel.GENERAL, Fore.RED + "PLest < 0: %s -> %s: %d (%s) %f %f %f" % (self.id2word[wordId], context, minId, self.id2word[minId], minVal, cosSum, plDen))
+            self.PLestSum += PLest
 
-    def getWordCount(self,i,corpus):
-        if i-1 in self.corpusCounts:
-            return self.corpusCounts[i-1]
-        else:
-            return 0
+            #self.condPrint(PrintLevel.EVERYTHING, "Creating PL for word %s and context %s: %f (of %f)" % (self.id2word[wordId], context, PLest, self.PLestSum))
+
+            self.PLestCache[comboString] = PLest
+            return PLest
+ 
+    # Compresses PLest and PL, since MinCos doesn't have to be computed each time in PL
+    def PL(self,wordId,context):
+        return pow(self.getCachedPLest(wordId, context) / self.PLestSum, self.gamma)
     
-    def LSAconf(self,i,corpus):
-        nom = 0;
-        countOfi = self,getWordCount(i,corpus)
-        for doc in corpus:
-    	    for id, val in doc:
-                if(i == id+1):
-                    Pij = val/countOfi
-                    nom = nom + Pij * math.log(Pij)
-        return 1 + nom/math.log(corpus.num_docs)
-    
-    def buildLSAConfCache(self,corpus):
-        for doc in corpus:
-            for id,val in doc:
-                gwc = self.getWordCountById(id, corpus)
+    def getWordCountById(self,wordId):
+        return self.corpusCounts.get(wordId, 0)
+
+    def buildLSAConfCache(self):
+        for doc in self.mm:
+            for wId,val in doc:
+                gwc = self.getWordCountById(wId)
                 if gwc:
                     Pij = val/gwc
-                    if id in self.LSAconfCacheNoms:
-                        self.LSAconfCacheNoms[id] += Pij * math.log(Pij)
-                    else:
-                        self.LSAconfCacheNoms[id] = Pij * math.log(Pij)
+                    self.LSAconfCacheNoms[wId] = self.LSAconfCacheNoms.get(wId, 0) + Pij * math.log(Pij)
 #                else:
 #                     print 
 #                    self.LSAconfCacheNoms[id] 
         for key in self.LSAconfCacheNoms:
-            self.LSAconfCacheNoms[key] = 1+ self.LSAconfCacheNoms[key]/math.log(corpus.num_docs)
+            self.LSAconfCacheNoms[key] = 1+ self.LSAconfCacheNoms[key]/math.log(self.mm.num_docs)
     
-    def getPrecachedLSAConf(self,id):
-        if id in self.LSAconfCacheNoms:
-            return self.LSAconfCacheNoms[id]
-        else:
-            return 0
+    def getPrecachedLSAConf(self,wId):
+        return self.LSAconfCacheNoms.get(wId, 0)
     
-    def getCachedLSAConf(self,w,i,corpus):
-        if w in self.confidenceCache:
-            return self.confidenceCache[w]
-        else:
-            conf = self.LSAconf(i,corpus)
-            self.confidenceCache[w] = conf
-            return conf
-    
-    def getWordCounts(self,corpus):
-        for doc in corpus:
-            for id, val in doc:
-                if id in self.corpusCounts:
-                    self.corpusCounts[id] = self.corpusCounts[id] + val
-                else:
-                    self.corpusCounts[id] = val
+    def getWordCounts(self):
+        for doc in self.mm:
+            for wId, val in doc:
+                self.corpusCounts[wId] = self.corpusCounts.get(wId, 0) + val
     
     def condPrint(self,level,text,name=''):
         if level <= self.verbosity:
             if self.programIdentifier:
                 print '%s %10s %s' % (strftime("%Y%m%d %H:%M:%S", gmtime()), self.programIdentifier, text)
-            else:
+            elif name:
                 print '%s %10s %s' % (strftime("%Y%m%d %H:%M:%S", gmtime()), name, text)
+            else:
+                print '%s %s' % (strftime("%Y%m%d %H:%M:%S", gmtime()), text)
 
     def __init__(self, cmdArgs):
         try:
@@ -250,7 +245,9 @@ class LsaLM:
                 self.taskParts = 1000
             elif opt in ('-L', '--writelsaconf'):
                 self.writeLSAConfFile = arg
-        
+       
+        init(autoreset=True)
+
         self.condPrint(PrintLevel.GENERAL, "Program identifier: %s" % self.programIdentifier)
         self.condPrint(PrintLevel.GENERAL, "Corpus file: %s" % self.mmfile)
         self.condPrint(PrintLevel.GENERAL, "Distributed: %s" % ("Yes" if self.distributed else "No"))
@@ -283,7 +280,7 @@ class LsaLM:
         self.condPrint(PrintLevel.STEPS, ">  Reading dictionary")
         readDictStart = time.time()
         self.id2word = gensim.corpora.Dictionary.load_from_text(self.dictfile)
-        #self.condPrint(PrintLevel.TIME, self.id2word)
+        self.condPrint(PrintLevel.TIME, self.id2word)
         self.condPrint(PrintLevel.TIME, " - Took %f seconds" % (time.time() - readDictStart))
         self.condPrint(PrintLevel.STEPS, "<  Done reading dictionary")
 
@@ -291,7 +288,7 @@ class LsaLM:
         self.condPrint(PrintLevel.STEPS, ">  Reading corpus")
         readCorpusStart = time.time()
         self.mm = gensim.corpora.MmCorpus(self.mmfile)
-        #self.condPrint(PrintLevel.TIME, self.mm)
+        self.condPrint(PrintLevel.TIME, self.mm)
         self.condPrint(PrintLevel.TIME, " - Took %f seconds" % (time.time() - readCorpusStart))
         self.condPrint(PrintLevel.STEPS, "<  Done reading corpus")
         
@@ -302,13 +299,13 @@ class LsaLM:
         self.lsi = None
         lsiStart = time.time()
         if not self.readLSIFile:
-            self.condPrint(PrintLevel.STEPS, ">  Generating LSI model")
+            self.condPrint(PrintLevel.STEPS, ">  Generating LSA model")
             self.lsi = gensim.models.lsimodel.LsiModel(corpus=self.mm, id2word=self.id2word, num_topics=self.dimensions, distributed=self.distributed)
         else:
-            self.condPrint(PrintLevel.STEPS, ">  Reading LSI model")
+            self.condPrint(PrintLevel.STEPS, ">  Reading LSA model")
             self.lsi = gensim.models.lsimodel.LsiModel.load(self.readLSIFile)
         self.condPrint(PrintLevel.TIME, " - Took %f seconds" % (time.time() - lsiStart))
-        self.condPrint(PrintLevel.STEPS, "<  Done processing the LSI model")
+        self.condPrint(PrintLevel.STEPS, "<  Done processing the LSA model")
         
         if self.saveLSIFile and not self.readLSIFile:
             self.condPrint(PrintLevel.STEPS, ">  Writing LSA model to file")
@@ -324,7 +321,7 @@ class LsaLM:
         countStart = time.time()
         if not self.readWordCountFile:
             self.condPrint(PrintLevel.STEPS, ">  Counting words")
-            self.getWordCounts(self.mm)
+            self.getWordCounts()
         else:
             self.condPrint(PrintLevel.STEPS, ">  Reading word counts")
             wcFile = open(self.readWordCountFile, 'rb')
@@ -349,7 +346,7 @@ class LsaLM:
         lsaconfStart = time.time()
         if not self.readLSAConfFile:
             self.condPrint(PrintLevel.STEPS, ">  Computing LSA confs")
-            self.buildLSAConfCache(self.mm)
+            self.buildLSAConfCache()
         else:
             self.condPrint(PrintLevel.STEPS, ">  Reading LSA confs")
             lcFile = open(self.readLSAConfFile, 'rb')
