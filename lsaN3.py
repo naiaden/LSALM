@@ -20,50 +20,26 @@ from colorama import init, Fore, Back, Style
 
 
 class LsaLMN3(LsaLM):
-   
-    def readContexts(self):
-        self.condPrint(PrintLevel.GENERAL, "-- Processing contexts")
-
-        readCStart = time.time()
-        if self.readContextsFile:
-            self.condPrint(PrintLevel.STEPS, ">  Reading contexts from file")
-            rcFile = open(self.readContextsFile, 'rb')
-            self.contextCentroids = pickle.load(rcFile)
-            rcFile.close()
-        else:
-            if self.trainFile:
-                self.condPrint(PrintLevel.STEPS, ">  Generating contexts")
-                with open(self.trainFile, 'r') as f:
-                    for line in f:
-                        words = line.rstrip().split()
-                        
-                        leftContext = ' '.join(words[0:2])
-                        rightContext = ''
-                        context = leftContext + '\t' + rightContext
-
-                        n1Tuple = self.id2word.doc2bow(words[0].split())
-                        n2Tuple = self.id2word.doc2bow(words[1].split())
-                        if n1Tuple and n2Tuple:
-                            n1Id = n1Tuple[0][0]
-                            n1Projection = self.lsi.projection.u[n1Id]
-                            n2Id = n2Tuple[0][0]
-                            n2Projection = self.lsi.projection.u[n2Id]
-
-                            centroid = n1Projection + n2Projection
-                            self.contextCentroids[context] = centroid
-            else:
-                self.condPrint(PrintLevel.STEPS, ">  No train file is given, therefore no contexts!")
-        self.condPrint(PrintLevel.TIME, " - Took %f seconds" % (time.time() - readCStart))
-        self.condPrint(PrintLevel.STEPS, "<  Done reading contexts")
+  
+    # This line has to be the core of the function:
+    # self.contextCentroids[context] = centroid
+    def createCentroid(self, line):
+        words = line.split()
         
-        if self.writeContextsFile and not self.readContextsFile:
-            self.condPrint(PrintLevel.STEPS, ">  Writing contexts to file")
-            cWriteStart = time.time()
-            rcFile = open(self.writeContextsFile, 'wb')
-            pickle.dump(self.contextCentroids, rcFile)
-            rcFile.close()
-            self.condPrint(PrintLevel.TIME, " - Took %f seconds" % (time.time() - cWriteStart))
-            self.condPrint(PrintLevel.STEPS, "<  Done writing contexts to file")
+        leftContext = ' '.join(words[0:2])
+        rightContext = ''
+        context = leftContext + '\t' + rightContext
+
+        n1Tuple = self.id2word.doc2bow(words[0].split())
+        n2Tuple = self.id2word.doc2bow(words[1].split())
+        if n1Tuple and n2Tuple:
+            n1Id = n1Tuple[0][0]
+            n1Projection = self.lsi.projection.u[n1Id]
+            n2Id = n2Tuple[0][0]
+            n2Projection = self.lsi.projection.u[n2Id]
+
+            centroid = n1Projection + n2Projection
+            self.contextCentroids[context] = centroid
 
     def evaluateWordForContext(self, context, focusWord):
         wordStart = time.time()
@@ -88,7 +64,6 @@ class LsaLMN3(LsaLM):
         return None    
 
     def evaluate(self):
-        self.readContexts()
 
         self.condPrint(PrintLevel.GENERAL, "-- Evaluating contexts")
 
@@ -140,4 +115,5 @@ class LsaLMN3(LsaLM):
 
 lm = LsaLMN3(sys.argv[1:])
 lm.buildSpace()
-lm.evaluate()
+#lm.readContexts()
+#lm.evaluate()
