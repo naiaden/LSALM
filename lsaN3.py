@@ -55,7 +55,6 @@ class LsaLMN3(LsaLM):
             PLvalue = self.PL(focusId,context)
             lc = self.getPrecachedLSAConf(focusId)
             return (PLvalue, "%s %s %s" % (leftContext, focusWord, rightContext), lc)
-        self.condPrint(PrintLevel.EVERYTHING, "        %s in %f" % (focusWord, time.time() - wordStart))
         return None    
 
     def evaluate(self):
@@ -76,14 +75,12 @@ class LsaLMN3(LsaLM):
                         if result:
                             (p, c, l) = result
 
-                            outputString = "%.16f\t%s\t%.16f\t%.16f" % (p, c, l, self.sumPLEPerContext[context])
+                            outputString = "%.16f\t%s\t%.16f\t%.16f\t%.16f" % (p, c, l, self.sumPLEPerContext[context], self.sumLSAConfPLEPerContext[context])
 
                             if self.outputFile:
                                 self.of.write("%s\n" % outputString)
                             else:
                                 print(outputString)
-                    else:
-                        self.condPrint(PrintLevel.EVERYTHING, "       !! No matching context found for %s" % context)
 
 lm = LsaLMN3(sys.argv[1:])
 lm.buildSpace()

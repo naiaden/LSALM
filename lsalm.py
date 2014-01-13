@@ -29,6 +29,9 @@ class LsaLM:
     contextCentroids = {} # contains the centroid vector of a context
     PLEWordIdContext = {} # contains the PL estimate value for a word id and a context
     sumPLEPerContext = {} # contains the PL estimate sum for a context
+    sumLSAConfPLEPerContext = {} # contains the sum(PL(j)*LsaConf(j)) for a context
+    srilmContext = {} # contains 
+    srilmProbs = {}
     
     verbosity = int(0)
     programIdentifier = ''
@@ -41,14 +44,21 @@ class LsaLM:
     dimensions = 150
     trainFile = ''
 
+    srilmProbsDirectory = ''
+    contextIndex = ''
+
     parallelPLEsFile = ''
     plainPLEsFile = ''
+    parallelLSAConfPLEsFile = ''
+    plainLSAConfPLEsFile = ''
 
     saveLSIFile = ''
     readLSIFile = ''
     outputFile = ''
     readContextPLEsFile = ''
     writeContextPLEsFile = ''
+    readContextLSAConfPLEsFile = ''
+    writeContextLSAConfPLEsFile = ''
     readContextsFile = ''
     writeContextsFile = ''
     readWordCountFile = ''
@@ -123,11 +133,21 @@ class LsaLM:
         self.condPrint(PrintLevel.NORMAL, "-T, --thousand             divide task in 1000 pieces, rather than the default 100", addPrefix=False)
         self.condPrint(PrintLevel.NORMAL, "-e, --evaluatepart n       evaluate subset n (of 100, unless -T), all=-1 (default=-1)", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "-- LSA Probability multiplied with LSA Confidence value", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "Similar to the previous block, but now the probabilities are not longer", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "estimates, and we multiply the values with their corresponding lsa confidence", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "-e can still be used", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-B, --parallellcple f      write intermediate lc pl step to f", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-b, --plainlcples f        read plain lc pl estimates (e.g. multiple -Q)", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-j, --readlcples f         read context lc pl estimates from f", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-J, --writelcples f        write context lc pl estimates to file f", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "-- Applying the rules", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "The last phase is about applying the rules to new data", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-S, --srilm f              contains the srilm n-gram logprobs (tab separated)")
         self.condPrint(PrintLevel.NORMAL, "-t, --test f               read lines to apply trained model on", addPrefix=False)
         self.condPrint(PrintLevel.NORMAL, "-s, --save f               save output (probability and lsa confidence) to file f", addPrefix=False)
-    
+
     def cos(self,wordId,context):
         w = self.lsi.projection.u[wordId]
         C = self.contextCentroids[context]
@@ -197,11 +217,23 @@ class LsaLM:
                 if gwc:
                     Pij = val/gwc
                     self.LSAconfCacheNoms[wId] = self.LSAconfCacheNoms.get(wId, 0) + Pij * math.log(Pij)
-        for key in self.LSAconfCacheNoms:
+        for keyId, key in enumerate(self.LSAconfCacheNoms):
             self.LSAconfCacheNoms[key] = 1+ self.LSAconfCacheNoms[key]/math.log(self.mm.num_docs)
     
     def getPrecachedLSAConf(self,wId):
-        return self.LSAconfCacheNoms.get(wId, 0)
+        # LSAconfCacheNoms starts with 0
+        # The rest starts with 1
+        return self.LSAconfCacheNoms.get(wId-1, 0)
+
+    def getSRILMProbs(self, context):
+        contextId = contextsToId[context]
+        with open("%s/context.%d" % (self.srilmProbsDirectory, contextId), 'r') as f:
+            contextSum = 0
+            for line in f:
+                context, logprob = line.rstrip().split('\t')
+                prob = math.exp(logprob)
+                contextSum += prob
+            srilmProbs[context] = contextSum
     
     def getWordCounts(self):
         for doc in self.mm:
@@ -224,7 +256,7 @@ class LsaLM:
 
     def __init__(self, cmdArgs):
         try:
-            opts, args = getopt.getopt(cmdArgs, 'hi:Dm:x:X:d:g:k:t:w:r:s:v:c:C:l:L:n:N:Te:p:P:Q:q:', ['help', 'id=', 'distributed', 'mfile=', 'readcontexts=', 'writecontexts', 'dfile=', 'gamma=', 'dimensions=','test=', 'write=', 'read=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'thousand', 'evaluatepart=', 'readples=', 'writeples=', 'parallelple=', 'plainples=' ])
+            opts, args = getopt.getopt(cmdArgs, 'hi:Dm:x:X:d:g:k:t:w:r:s:v:c:C:l:L:n:N:Te:p:P:Q:q:j:J:B:b:S:I:', ['help', 'id=', 'distributed', 'mfile=', 'readcontexts=', 'writecontexts', 'dfile=', 'gamma=', 'dimensions=','test=', 'write=', 'read=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'thousand', 'evaluatepart=', 'readples=', 'writeples=', 'parallelple=', 'plainples=', 'readlcples=', 'writelcples=', 'parallellcple=', 'plainlcples=', 'srilm=', 'contextindex=' ])
         except getopt.GetoptError:
             self.printHelp()
             sys.exit(2)
@@ -280,6 +312,18 @@ class LsaLM:
                 self.parallelPLEsFile = arg
             elif opt in ('-q', '--plainples'):
                 self.plainPLEsFile = arg
+            elif opt in ('-j', '--readlcples'):
+                self.readContextLSAConfPLEsFile = arg
+            elif opt in ('-J', '--writelcples'):
+                self.writeContextLSAConfPLEsFile = arg
+            elif opt in ('-B', '--parallellcple'):
+                self.parallelLSAConfPLEsFile = arg
+            elif opt in ('-b', '--plainlcples'):
+                self.plainLSAConfPLEsFile = arg
+            elif opt in ('-S', '--srilm'):
+                self.srilmProbsDirectory = arg
+            elif opt in ('-I', '--contextindex'):
+                self.contextIndex = arg
        
         init(autoreset=True)
 
@@ -296,6 +340,7 @@ class LsaLM:
         self.condPrint(PrintLevel.GENERAL, "Gamma: %f" % self.gamma)
         self.condPrint(PrintLevel.GENERAL, "Dimensions: %s" % self.dimensions)
         self.condPrint(PrintLevel.GENERAL, "Evaluate on: %s" % self.trainFile)
+        self.condPrint(PrintLevel.GENERAL, "SRILM n-gram probabilities in: %s" % self.srilmProbsFile)
         self.condPrint(PrintLevel.GENERAL, "Save LSA in: %s" % self.saveLSIFile)
         self.condPrint(PrintLevel.GENERAL, "Read LSA from: %s" % self.readLSIFile)
         self.condPrint(PrintLevel.GENERAL, "Read Context PL estimates from: %s" % self.readContextPLEsFile)
@@ -303,6 +348,7 @@ class LsaLM:
         self.condPrint(PrintLevel.GENERAL, "Write tab-separated PLEs to f")
         self.condPrint(PrintLevel.GENERAL, "Read from tab-separated PLEs from f")
         self.condPrint(PrintLevel.GENERAL, "Write output to: %s" % self.outputFile)
+        self.condPrint(PrintLevel.GENERAL, "Read context-index SRILM files from: %s" % self.srilmProbsDirectory)
         self.condPrint(PrintLevel.GENERAL, "Evaluate only part %s of %s" % (self.evaluatePart, self.taskParts))
         self.condPrint(PrintLevel.GENERAL, "Verbosity level: %s" % self.verbosity)
 
@@ -490,6 +536,65 @@ class LsaLM:
             cpFile.close()
             self.condPrint(PrintLevel.TIME, " - Writing Context PLs took %f seconds" % (time.time() - cWriteStart))
             self.condPrint(PrintLevel.STEPS, "<  Done writing Context PLs to file")
+
+        ### LC PL STUFF #################################
+
+        self.condPrint(PrintLevel.GENERAL, "-- Processing the LSA conf PLEs")
+
+        cpStart = time.time()
+        if self.readContextLSAConfPLEsFile:
+            self.condPrint(PrintLevel.STEPS, ">  Reading Context LC PLs from file")
+            cpFile = open(self.readContextLSAConfPLEsFile, 'rb')
+            self.sumLSAConfPLEPerContext = pickle.load(cpFile)
+            cpFile.close()
+        elif self.plainLSAConfPLEsFile:
+            self.condPrint(PrintLevel.STEPS, ">  Reading tab-separated Context LC PLs from file")
+            with open(self.plainLSAConfPLEsFile, 'r') as f:
+                for line in f:
+                    lContext, rContext, value = line.rstrip().split('\t')
+                    context = lContext + '\t' + rContext
+                    self.sumLSAConfPLEPerContext[context] = float(value)
+        else:
+            self.condPrint(PrintLevel.STEPS, ">  Computing Context LC PLs")
+
+            if self.evaluatePart > 0:
+                evaluateF = math.floor(len(self.contextCentroids)*1.0*(self.evaluatePart-1)/self.taskParts)
+                evaluateT = math.floor(len(self.contextCentroids)*1.0*(self.evaluatePart)/self.taskParts)
+            else:
+                evaluateF = 0
+                evaluateT = len(self.contextCentroids)
+
+            if self.parallelLSAConfPLEsFile:
+                pf = open(self.parallelLSAConfPLEsFile, 'w')
+                self.condPrint(PrintLevel.STEPS, "Opening parallelLSAConfPLEsFile: %s" % self.parallelPLEsFile)
+
+
+            cpCtr = 0
+            print Fore.YELLOW + "Nr contexts[%d-%d]: %d, Nr words: %d. Len(LSACACHE)=%d" % (evaluateF, evaluateT, len(self.contextCentroids), len(self.id2word), len(self.LSAconfCacheNoms))
+            for contextId, context in enumerate(self.contextCentroids):
+                if evaluateF < contextId <= evaluateT:
+                    cStart = time.time()
+                    for wId in self.id2word:
+                        cpCtr += 1
+                        self.sumLSAConfPLEPerContext[context] = self.sumLSAConfPLEPerContext.get(context, 0) + pow(self.PL(wId, context), self.getPrecachedLSAConf(wId)) + pow(self.getSRILMProbs(context), 1-self.getPrecachedLSAConf(wId))
+                    if self.parallelLSAConfPLEsFile:
+                        pf.write("%s\t%.16f\n" % (context, self.sumLSAConfPLEPerContext[context]))
+                    #print Fore.YELLOW + "%f Time for context: %s" % (time.time()-cStart, context)
+            print Fore.GREEN + "PR shits: %d" % cpCtr
+        self.condPrint(PrintLevel.TIME, " - Reading/computing Context LC PLs took %f seconds" % (time.time() - cpStart))
+        self.condPrint(PrintLevel.STEPS, "<  Done reading/computing Context LC PLs")
+
+        if self.parallelLSAConfPLEsFile:
+            pf.close()
+
+        if self.writeContextLSAConfPLEsFile and not self.readContextLSAConfPLEsFile:
+            self.condPrint(PrintLevel.STEPS, ">  Writing Context LC PLs to file")
+            cWriteStart = time.time()
+            cpFile = open(self.writeContextLSAConfPLEsFile, 'wb')
+            pickle.dump(self.sumLSAConfPLEPerContext, cpFile)
+            cpFile.close()
+            self.condPrint(PrintLevel.TIME, " - Writing Context LC PLs took %f seconds" % (time.time() - cWriteStart))
+            self.condPrint(PrintLevel.STEPS, "<  Done writing Context LC PLs to file")
 
 
     def close(self):
