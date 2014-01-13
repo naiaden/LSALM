@@ -233,8 +233,23 @@ class LsaLM:
                 context, logprob = line.rstrip().split('\t')
                 prob = math.exp(logprob)
                 contextSum += prob
-            srilmProbs[context] = contextSum
-    
+            srilmContext[context] = contextSum
+
+    def getSRILMProb(self, context, word, lsaconf):
+        contextId = contextsToId[context]
+        result = 0
+#        if context not in srilmContext:
+        with open("%s/context.%d" % (self.srilmProbsDirectory, contextId), 'r') as f:
+            contextSum = 0
+            for line in f:
+                localContext, logprob = line.rstrip().split('\t')
+                if context == localContext:
+                    result = math.exp(logprob)
+                prob = math.exp(logprob)
+                contextSum += pow(prob, 1-lsaconf)
+            srilmContext[context] = contextSum
+        return result
+
     def getWordCounts(self):
         for doc in self.mm:
             for wId, val in doc:
@@ -496,6 +511,14 @@ class LsaLM:
                     self.sumPLEPerContext[context] = float(value)
         else:
             self.condPrint(PrintLevel.STEPS, ">  Computing Context PLs")
+
+            self.condPrint(PrintLevel.NORMAL, " >>> Starting parallel processing of PLEs"
+
+            threads = 24
+            queue = Queue(threads)
+            processes = []
+
+
 
             if self.evaluatePart > 0:
                 evaluateF = math.floor(len(self.contextCentroids)*1.0*(self.evaluatePart-1)/self.taskParts)
