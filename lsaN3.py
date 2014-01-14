@@ -54,33 +54,39 @@ class LsaLMN3(LsaLM):
 
             PLvalue = self.PL(focusId,context)
             lc = self.getPrecachedLSAConf(focusId)
-            return (PLvalue, "%s %s %s" % (leftContext, focusWord, rightContext), lc)
+            return (PLvalue, "%s %s %s" % (leftContext, focusWord, rightContext), lc, focusId)
         return None    
 
     def evaluate(self):
-
-        self.condPrint(PrintLevel.GENERAL, "-- Evaluating contexts")
-
-        if self.trainFile:
-            with open(self.trainFile, 'r') as f:
-                self.condPrint(PrintLevel.SPECIFIC, "  -- Computing probability per word")
-                for line in f:
-                    line = line.rstrip()
-                    focusWord = line.split()[-1]
-                    self.condPrint(PrintLevel.SPECIFIC, "     - Processing %s" % focusWord)
-                    context = ' '.join(line.split()[0:2]) + '\t' + '' # empty right context
-
-                    if context in self.contextCentroids:
-                        result = self.evaluateWordForContext(context, focusWord)
-                        if result:
-                            (p, c, l) = result
-
-                            outputString = "%.16f\t%s\t%.16f\t%.16f\t%.16f" % (p, c, l, self.sumPLEPerContext[context], self.sumLSAConfPLEPerContext[context])
-
-                            if self.outputFile:
-                                self.of.write("%s\n" % outputString)
-                            else:
-                                print(outputString)
+        pass
+#
+#        self.condPrint(PrintLevel.GENERAL, "-- Evaluating contexts")
+#
+#        if self.trainFile:
+#            with open(self.trainFile, 'r') as f:
+#                self.condPrint(PrintLevel.SPECIFIC, "  -- Computing probability per word")
+#                for line in f:
+#                    line = line.rstrip()
+#                    focusWord = line.split()[-1]
+#                    self.condPrint(PrintLevel.SPECIFIC, "     - Processing %s" % focusWord)
+#                    context = ' '.join(line.split()[0:2]) + '\t' + '' # empty right context
+#
+#                    if context in self.contextCentroids:
+#                        result = self.evaluateWordForContext(context, focusWord)
+#                        if result:
+#                            (pl, text, lc, wId) = result
+#
+#                            wProb = p + self.getSRILMProb(wId ,context) 
+#                            normalisation = 0
+#                            for wId in self.id2word:
+#                                normalisation += pow(self.PL(wId, context), l) + pow(self.getSRILMProb(wId, context), 1-l)
+#                            outputString = "" % ()
+#                            #outputString = "%.16f\t%s\t%.16f\t%.16f\t%.16f" % (p, c, l, self.sumPLEPerContext[context], self.sumLSAConfPLEPerContext[context])
+#
+#                            if self.outputFile:
+#                                self.of.write("%s\n" % outputString)
+#                            else:
+#                                print(outputString)
 
 lm = LsaLMN3(sys.argv[1:])
 lm.buildSpace()

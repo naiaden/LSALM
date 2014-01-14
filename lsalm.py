@@ -11,6 +11,10 @@ import time
 import pickle
 from time import gmtime, strftime
 from colorama import init, Fore, Back, Style
+from threading import Lock, Thread
+from multiprocessing import Process, Queue, Manager
+
+import pprint
 
 class PrintLevel:
     (NORMAL, GENERAL, STEPS, TIME, SPECIFIC, EVERYTHING) = range(0, 6)
@@ -32,9 +36,17 @@ class LsaLM:
     sumLSAConfPLEPerContext = {} # contains the sum(PL(j)*LsaConf(j)) for a context
     srilmContext = {} # contains 
     srilmProbs = {}
+
+    def printVariableLengths(self):
+        print "%s %d [%d], %s %d, %s %d, %s %d, %s %d, %s %d [%d], %s %d, %s %d, %s %d" % ("mcc", len(self.minCosCache), sys.getsizeof(pickle.dumps(self.minCosCache)),  "cc", len(self.corpusCounts), "lccn", len(self.LSAconfCacheNoms), "cxc", len(self.contextCentroids), "pwid", len(self.PLEWordIdContext), "spc", len(self.sumPLEPerContext), sys.getsizeof(pickle.dumps(self.sumPLEPerContext)), "slcpc", len(self.sumLSAConfPLEPerContext), "sc", len(self.srilmContext), "sp", len(self.srilmProbs))
+
+    sumPLEPerContextLock = Lock()
+    PLEWordIdContextLock = Lock()
+    minCosCacheLock = Lock()
     
     verbosity = int(0)
     programIdentifier = ''
+    threads = 24
     
     distributed = False
     mmfile = 'markovmarket'
@@ -59,6 +71,8 @@ class LsaLM:
     writeContextPLEsFile = ''
     readContextLSAConfPLEsFile = ''
     writeContextLSAConfPLEsFile = ''
+    readMinCosFile = ''
+    writeMinCosFile = ''
     readContextsFile = ''
     writeContextsFile = ''
     readWordCountFile = ''
@@ -80,6 +94,7 @@ class LsaLM:
         self.condPrint(PrintLevel.NORMAL, "-i, --id s                 give the program an id, useful for output of parallel processes", addPrefix=False)
         self.condPrint(PrintLevel.NORMAL, "-v, --verbosity n          set verbosity level (default=0)", addPrefix=False)    
         self.condPrint(PrintLevel.NORMAL, "                           (0=normal, 1=general, 2=steps, 3=time, 4=specific, 5=everything)", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-I, --threads n            the number of threads used in parallel computations (default=24)", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "-- Dictionary and Corpus", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "First, the dictionary and corpus are loaded. Even if the LSA Space created from", addPrefix=False)
@@ -133,6 +148,11 @@ class LsaLM:
         self.condPrint(PrintLevel.NORMAL, "-T, --thousand             divide task in 1000 pieces, rather than the default 100", addPrefix=False)
         self.condPrint(PrintLevel.NORMAL, "-e, --evaluatepart n       evaluate subset n (of 100, unless -T), all=-1 (default=-1)", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "-- Mincos", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "Since the mincos (and related) values are not dependent of the words, we can precompute them.", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-z, --readmincos f         read the mincos values from f", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "-Z, --writemincos f        write the mincos values to f", addPrefix=False)
+        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "-- LSA Probability multiplied with LSA Confidence value", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "Similar to the previous block, but now the probabilities are not longer", addPrefix=False)
         self.condPrint(PrintLevel.EVERYTHING, "estimates, and we multiply the values with their corresponding lsa confidence", addPrefix=False)
@@ -178,19 +198,28 @@ class LsaLM:
         plDen = cosSum - len(self.id2word) * minVal
         return (minId, minVal, cosSum, plDen)
     
-    def getCachedminCos(self,context):
-        if context in self.minCosCache:
-            return self.minCosCache[context]
+    def getCachedminCos(self,context,mcc=None):
+        if not mcc:
+            mcc = self.minCosCache
+        result = 0
+        if context in mcc:
+            result = mcc[context]
         else:
             mincos = self.minCos(context)
-            self.minCosCache[context] = mincos
-            return mincos
+            mcc[context] = mincos
+            pprint.pprint(mcc)
+            result = mincos
+        return result
 
-    def getCachedPLE(self,wordId,context):
+    def getCachedPLE(self,wordId,context,cache=True):
         comboString = ("%d %s" % (wordId, context))
+        self.PLEWordIdContextLock.acquire()
         if comboString in self.PLEWordIdContext:
-            return self.PLEWordIdContext[comboString]
+            result = self.PLEWordIdContext[comboString]
+            self.PLEWordIdContextLock.release()
+            return result
         else:
+            self.PLEWordIdContextLock.release()
             (minId, minVal, cosSum, plDen) = self.getCachedminCos(context)
             wordCos = self.cos(wordId, context)
             if wordCos < minVal:
@@ -200,9 +229,70 @@ class LsaLM:
             if PLest < 0:
                 raise InvalidValueError(Fore.RED + "PLest < 0\nWord: %s\nContext: %s\nWordId lowest cosine with value:%d (%s) %f\nCossum:%f\nplDen: %f" % (self.id2word[wordId], context, minId, self.id2word[minId], minVal, cosSum, plDen))
 
-            self.PLEWordIdContext[comboString] = PLest
+            if cache:
+                self.PLEWordIdContextLock.acquire()
+                self.PLEWordIdContext[comboString] = PLest
+                self.PLEWordIdContextLock.release()
             return PLest
+
+
+    # Computes the part below the divider in formula (7)
+    def parallelLCPLE(self, info, queue):
+        while True:
+            info, context = queue.get()
+            if not info and not context:
+                return
+
+            if info and not context:
+                self.condPrint(PrintLevel.GENERAL, "Processing %d th element in process %d" % (info, pId))
+            else:
+                for wId in self.id2word:
+                    lc = self.getPrecachedLSAConf(wId)
+                    self.contextNormalisation[context] = self.contextNormalisation.get(context, 0) + pow(self.PL(wId, context), lc) + pow(self.getSRILMProb(wId, context,lc), 1-lc)
+                    #self.sumPLEPerContext[context] = self.sumPLEPerContext.get(context, 0) + pow(PLEst, self.gamma)
+#self.sumLSAConfPLEPerContext[context] = self.sumLSAConfPLEPerContext.get(context, 0) + pow(self.PL(wId, context), self.getPrecachedLSAConf(wId)) + pow(self.getSRILMProbs(context), 1-self.getPrecachedLSAConf(wId))
+
+    def parallelPLE(self, pId, queue):
+        while True:
+            wId, context = queue.get()
+            if not wId and not context:
+                return
+
+            if wId and not context:
+                if wId < 0:
+                    self.condPrint(PrintLevel.GENERAL, "Processing %dth context in process %d" % (wId, pId))
+                    self.printVariableLengths()
+                else:
+                    self.condPrint(PrintLevel.GENERAL, "Processing %dth element in process %d" % (wId, pId))
+            else:
+                PLEst = self.getCachedPLE(wId, context,cache=False)
+                self.sumPLEPerContextLock.acquire()
+                try:
+                    self.sumPLEPerContext[context] = self.sumPLEPerContext.get(context, 0) + pow(PLEst, self.gamma)
+                finally:
+                    self.sumPLEPerContextLock.release()
     
+    def parallelMinCos(self, pId, queue, d):
+        while True:
+            cId, context = queue.get()
+            if not cId and not context:
+                return
+
+
+            result = 0
+            if context in d:
+                result = d[context]
+            else:
+                mincos = self.minCos(context)
+                d[context] = mincos
+                pprint.pprint(d)
+                result = mincos
+
+            #self.getCachedminCos(context, localMinCosCache)
+            print "[%d] Processed %d: %s" % (pId, cId, context)
+#            if not cId % 20:
+#                print "MCC: %d after context %d" % (len(self.minCosCache), cId)
+
     def PL(self,wordId,context):
         # FORMULA (5)
         return pow(self.getCachedPLE(wordId, context), self.gamma) / self.sumPLEPerContext[context]
@@ -235,7 +325,7 @@ class LsaLM:
                 contextSum += prob
             srilmContext[context] = contextSum
 
-    def getSRILMProb(self, context, word, lsaconf):
+    def getSRILMProb(self, context, word, lsaconf=1.0):
         contextId = contextsToId[context]
         result = 0
 #        if context not in srilmContext:
@@ -271,7 +361,7 @@ class LsaLM:
 
     def __init__(self, cmdArgs):
         try:
-            opts, args = getopt.getopt(cmdArgs, 'hi:Dm:x:X:d:g:k:t:w:r:s:v:c:C:l:L:n:N:Te:p:P:Q:q:j:J:B:b:S:I:', ['help', 'id=', 'distributed', 'mfile=', 'readcontexts=', 'writecontexts', 'dfile=', 'gamma=', 'dimensions=','test=', 'write=', 'read=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'thousand', 'evaluatepart=', 'readples=', 'writeples=', 'parallelple=', 'plainples=', 'readlcples=', 'writelcples=', 'parallellcple=', 'plainlcples=', 'srilm=', 'contextindex=' ])
+            opts, args = getopt.getopt(cmdArgs, 'hi:I:Dm:x:X:d:g:k:t:w:r:s:v:c:C:l:L:n:N:Te:p:P:Q:q:j:J:B:b:S:I:z:Z:', ['help', 'id=', 'threads=', 'distributed', 'mfile=', 'readcontexts=', 'writecontexts', 'dfile=', 'gamma=', 'dimensions=','test=', 'write=', 'read=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'thousand', 'evaluatepart=', 'readples=', 'writeples=', 'parallelple=', 'plainples=', 'readlcples=', 'writelcples=', 'parallellcple=', 'plainlcples=', 'srilm=', 'contextindex=', 'readmincos=', 'writemincos=' ])
         except getopt.GetoptError:
             self.printHelp()
             sys.exit(2)
@@ -283,6 +373,8 @@ class LsaLM:
                 sys.exit()
             if opt in ('-i', '--id'):
                 self.programIdentifier = arg
+            if opt in ('-I', '--threads'):
+                self.threads = int(arg)
             elif opt in('-D', '--distributed'):
                 self.distributed = True
             elif opt in ('-m', '--mfile'):
@@ -339,10 +431,15 @@ class LsaLM:
                 self.srilmProbsDirectory = arg
             elif opt in ('-I', '--contextindex'):
                 self.contextIndex = arg
+            elif opt in ('-z', '--readmincos'):
+                self.readMinCosFile = arg
+            elif opt in ('-Z', '--writemincos'):
+                self.writeMinCosFile = arg
        
         init(autoreset=True)
 
         self.condPrint(PrintLevel.GENERAL, "Program identifier: %s" % self.programIdentifier)
+        self.condPrint(PrintLevel.GENERAL, "Number of threads: %d" % self.threads)
         self.condPrint(PrintLevel.GENERAL, "Corpus file: %s" % self.mmfile)
         self.condPrint(PrintLevel.GENERAL, "Distributed: %s" % ("Yes" if self.distributed else "No"))
         self.condPrint(PrintLevel.GENERAL, "Dictionary file: %s" % self.dictfile)
@@ -355,7 +452,7 @@ class LsaLM:
         self.condPrint(PrintLevel.GENERAL, "Gamma: %f" % self.gamma)
         self.condPrint(PrintLevel.GENERAL, "Dimensions: %s" % self.dimensions)
         self.condPrint(PrintLevel.GENERAL, "Evaluate on: %s" % self.trainFile)
-        self.condPrint(PrintLevel.GENERAL, "SRILM n-gram probabilities in: %s" % self.srilmProbsFile)
+        self.condPrint(PrintLevel.GENERAL, "SRILM n-gram probabilities in: %s" % self.srilmProbsDirectory)
         self.condPrint(PrintLevel.GENERAL, "Save LSA in: %s" % self.saveLSIFile)
         self.condPrint(PrintLevel.GENERAL, "Read LSA from: %s" % self.readLSIFile)
         self.condPrint(PrintLevel.GENERAL, "Read Context PL estimates from: %s" % self.readContextPLEsFile)
@@ -363,6 +460,8 @@ class LsaLM:
         self.condPrint(PrintLevel.GENERAL, "Write tab-separated PLEs to f")
         self.condPrint(PrintLevel.GENERAL, "Read from tab-separated PLEs from f")
         self.condPrint(PrintLevel.GENERAL, "Write output to: %s" % self.outputFile)
+        self.condPrint(PrintLevel.GENERAL, "Write mincos to: %s" % self.writeMinCosFile)
+        self.condPrint(PrintLevel.GENERAL, "Read mincos from: %s" % self.readMinCosFile)
         self.condPrint(PrintLevel.GENERAL, "Read context-index SRILM files from: %s" % self.srilmProbsDirectory)
         self.condPrint(PrintLevel.GENERAL, "Evaluate only part %s of %s" % (self.evaluatePart, self.taskParts))
         self.condPrint(PrintLevel.GENERAL, "Verbosity level: %s" % self.verbosity)
@@ -492,6 +591,58 @@ class LsaLM:
             self.condPrint(PrintLevel.TIME, " - Writing contexts took %f seconds" % (time.time() - cWriteStart))
             self.condPrint(PrintLevel.STEPS, "<  Done writing contexts to file")
 
+        ### MinCos ######################################
+
+        self.condPrint(PrintLevel.STEPS, "-- Precomputing the mincos values")
+       
+        mcStart = time.time()
+        if self.readMinCosFile:
+            self.condPrint(PrintLevel.STEPS, ">  Reading mincos from file")
+            mcFile = open(self.readMinCosFile, 'rb')
+            self.minCosCache = pickle.load(mcFile)
+            mcFile.close()
+        else:
+            manager = Manager()
+            d = manager.dict()
+
+            mcQueue = Queue()
+            processes = []
+
+            for i in range(self.threads):
+                process = Process(target=self.parallelMinCos, args=(i, mcQueue,d,))
+                processes.append(process)
+                process.start()
+
+            for contextId, context in enumerate(self.contextCentroids):
+                mcQueue.put((contextId, context))
+                if contextId > 30:
+                    break
+
+            for _ in range(self.threads):
+                mcQueue.put((None,None))
+
+            for process in processes:
+                process.join()
+
+            print "-------------"
+            print len(d), d
+            print "-------------"
+        self.condPrint(PrintLevel.TIME, " - Reading mincos took %f seconds" % (time.time() - mcStart))
+        self.condPrint(PrintLevel.STEPS, "<  Done reading the mincos values")
+
+        if self.writeMinCosFile and not self.readMinCosFile:
+            self.condPrint(PrintLevel.STEPS, ">  Writing mincos to file")
+            mcStart = time.time()
+            mcFile = open(self.writeMinCosFile, 'wb')
+            pickle.dump(self.minCosCache, mcFile)
+            mcFile.close()
+            self.condPrint(PrintLevel.TIME, " - Writing mincos took %f seconds" % (time.time() - mcStart))
+            self.condPrint(PrintLevel.STEPS, "<  Done writing mincos to file")
+
+        self.printVariableLengths()
+
+        sys.exit()
+
         ### PLEs ########################################
 
         self.condPrint(PrintLevel.GENERAL, "-- Processing the PLEs")
@@ -512,44 +663,37 @@ class LsaLM:
         else:
             self.condPrint(PrintLevel.STEPS, ">  Computing Context PLs")
 
-            self.condPrint(PrintLevel.NORMAL, " >>> Starting parallel processing of PLEs"
+            self.condPrint(PrintLevel.NORMAL, " >>> Starting parallel processing of PLEs")
 
-            threads = 24
-            queue = Queue(threads)
+            pleQueue = Queue()
             processes = []
 
+            for i in range(self.threads):
+                process = Process(target=self.parallelPLE, args=(i,pleQueue,))
+                processes.append(process)
+                process.start()
 
-
-            if self.evaluatePart > 0:
-                evaluateF = math.floor(len(self.contextCentroids)*1.0*(self.evaluatePart-1)/self.taskParts)
-                evaluateT = math.floor(len(self.contextCentroids)*1.0*(self.evaluatePart)/self.taskParts)
-            else:
-                evaluateF = 0
-                evaluateT = len(self.contextCentroids)
-
-            if self.parallelPLEsFile:
-                pf = open(self.parallelPLEsFile, 'w')
-                self.condPrint(PrintLevel.STEPS, "Opening parallelPLEsFile: %s" % self.parallelPLEsFile)
-
-
-            cpCtr = 0
-            print Fore.YELLOW + "Nr contexts[%d-%d]: %d, Nr words: %d" % (evaluateF, evaluateT, len(self.contextCentroids), len(self.id2word))
+            placeInQueue = 0
             for contextId, context in enumerate(self.contextCentroids):
-                if evaluateF < contextId <= evaluateT:
-                    cStart = time.time()
-                    for wId in self.id2word:
-                        cpCtr += 1
-                        PLEst = self.getCachedPLE(wId, context)
-                        self.sumPLEPerContext[context] = self.sumPLEPerContext.get(context, 0) + pow(PLEst, self.gamma)
-                    if self.parallelPLEsFile:
-                        pf.write("%s\t%.16f\n" % (context, self.sumPLEPerContext[context]))
-                    #print Fore.YELLOW + "%f Time for context: %s" % (time.time()-cStart, context)
-            print Fore.GREEN + "PR shits: %d" % cpCtr
+                pleQueue.put((-contextId, None))
+                for wId in self.id2word:
+                    #self.condPrint(PrintLevel.GENERAL, "<-x-> %d" % placeInQueue)
+                    if not placeInQueue % 10000:
+                       pleQueue.put((placeInQueue, None))
+                    pleQueue.put((wId, context))
+                    placeInQueue += 1
+
+            self.condPrint(PrintLevel.GENERAL, "Putting an end to this shit!")
+            for _ in range(self.threads):
+                pleQueue.put((None, None))
+            
+            for process in processes:
+                process.join()
+
+            self.condPrint(PrintLevel.NORMAL, " <<< Done with parallel processing of PLEs")
+
         self.condPrint(PrintLevel.TIME, " - Reading/computing Context PLs took %f seconds" % (time.time() - cpStart))
         self.condPrint(PrintLevel.STEPS, "<  Done reading/computing Context PLs")
-
-        if self.parallelPLEsFile:
-            pf.close()
 
         if self.writeContextPLEsFile and not self.readContextPLEsFile:
             self.condPrint(PrintLevel.STEPS, ">  Writing Context PLs to file")
@@ -560,7 +704,11 @@ class LsaLM:
             self.condPrint(PrintLevel.TIME, " - Writing Context PLs took %f seconds" % (time.time() - cWriteStart))
             self.condPrint(PrintLevel.STEPS, "<  Done writing Context PLs to file")
 
-        ### LC PL STUFF #################################
+
+        print "-------------- done ------------------"
+        sys.exit()
+
+        ### LC PL STUFF ### FINAL STEP ##################
 
         self.condPrint(PrintLevel.GENERAL, "-- Processing the LSA conf PLEs")
 
@@ -580,35 +728,34 @@ class LsaLM:
         else:
             self.condPrint(PrintLevel.STEPS, ">  Computing Context LC PLs")
 
-            if self.evaluatePart > 0:
-                evaluateF = math.floor(len(self.contextCentroids)*1.0*(self.evaluatePart-1)/self.taskParts)
-                evaluateT = math.floor(len(self.contextCentroids)*1.0*(self.evaluatePart)/self.taskParts)
-            else:
-                evaluateF = 0
-                evaluateT = len(self.contextCentroids)
+            self.condPrint(PrintLevel.NORMAL, " >>> Starting parallel processing of PLEs")
 
-            if self.parallelLSAConfPLEsFile:
-                pf = open(self.parallelLSAConfPLEsFile, 'w')
-                self.condPrint(PrintLevel.STEPS, "Opening parallelLSAConfPLEsFile: %s" % self.parallelPLEsFile)
+            lcpleQueue = Queue()
+            processes = []
 
+            for i in range(self.threads):
+                process = Process(target=self.parallelLCPLE, args=(i,lcpleQueue,))
+                processes.append(process)
+                process.start()
 
-            cpCtr = 0
-            print Fore.YELLOW + "Nr contexts[%d-%d]: %d, Nr words: %d. Len(LSACACHE)=%d" % (evaluateF, evaluateT, len(self.contextCentroids), len(self.id2word), len(self.LSAconfCacheNoms))
+            placeInQueue = 0
             for contextId, context in enumerate(self.contextCentroids):
-                if evaluateF < contextId <= evaluateT:
-                    cStart = time.time()
-                    for wId in self.id2word:
-                        cpCtr += 1
-                        self.sumLSAConfPLEPerContext[context] = self.sumLSAConfPLEPerContext.get(context, 0) + pow(self.PL(wId, context), self.getPrecachedLSAConf(wId)) + pow(self.getSRILMProbs(context), 1-self.getPrecachedLSAConf(wId))
-                    if self.parallelLSAConfPLEsFile:
-                        pf.write("%s\t%.16f\n" % (context, self.sumLSAConfPLEPerContext[context]))
-                    #print Fore.YELLOW + "%f Time for context: %s" % (time.time()-cStart, context)
-            print Fore.GREEN + "PR shits: %d" % cpCtr
-        self.condPrint(PrintLevel.TIME, " - Reading/computing Context LC PLs took %f seconds" % (time.time() - cpStart))
-        self.condPrint(PrintLevel.STEPS, "<  Done reading/computing Context LC PLs")
+                for wId in self.id2word:
+                    #self.condPrint(PrintLevel.GENERAL, "<-x-> %d" % placeInQueue)
+                    if not placeInQueue % 10000:
+                       lcpleQueue.put((placeInQueue, None))
+                    lcpleQueue.put((wId, context))
+                    placeInQueue += 1
 
-        if self.parallelLSAConfPLEsFile:
-            pf.close()
+            self.condPrint(PrintLevel.GENERAL, "Putting an end to this shit!")
+            for _ in range(self.threads):
+                lcpleQueue.put((None, None))
+            
+            for process in processes:
+                process.join()
+
+            self.condPrint(PrintLevel.NORMAL, " <<< Done with parallel processing of PLEs")
+            
 
         if self.writeContextLSAConfPLEsFile and not self.readContextLSAConfPLEsFile:
             self.condPrint(PrintLevel.STEPS, ">  Writing Context LC PLs to file")
