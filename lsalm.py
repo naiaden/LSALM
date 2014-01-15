@@ -26,13 +26,15 @@ class InvalidValueError(Exception):
         return repr(self.value)
 
 class LsaLM:
+    manager = Manager()
 
-    minCosCache = {} # contains the min cos cache of a context
+
+    minCosCache = manager.dict() # contains the min cos cache of a context
     corpusCounts = {} # contains the corpus count of a word id
     LSAconfCacheNoms = {} # contains the lsa confidence value of a word id
     contextCentroids = {} # contains the centroid vector of a context
-    PLEWordIdContext = {} # contains the PL estimate value for a word id and a context
-    sumPLEPerContext = {} # contains the PL estimate sum for a context
+    PLEWordIdContext = manager.dict() # contains the PL estimate value for a word id and a context
+    sumPLEPerContext = manager.dict() # contains the PL estimate sum for a context
     sumLSAConfPLEPerContext = {} # contains the sum(PL(j)*LsaConf(j)) for a context
     srilmContext = {} # contains 
     sumLSAConfPBEPerContext = {}
@@ -41,9 +43,9 @@ class LsaLM:
     def printVariableLengths(self):
         print "%s %d [%d], %s %d, %s %d, %s %d, %s %d, %s %d [%d], %s %d, %s %d, %s %d" % ("mcc", len(self.minCosCache), sys.getsizeof(pickle.dumps(self.minCosCache)),  "cc", len(self.corpusCounts), "lccn", len(self.LSAconfCacheNoms), "cxc", len(self.contextCentroids), "pwid", len(self.PLEWordIdContext), "spc", len(self.sumPLEPerContext), sys.getsizeof(pickle.dumps(self.sumPLEPerContext)), "slcpc", len(self.sumLSAConfPLEPerContext), "sc", len(self.srilmContext), "sp", len(self.srilmProbs))
 
-    sumPLEPerContextLock = Lock()
-    PLEWordIdContextLock = Lock()
-    minCosCacheLock = Lock()
+    sumPLEPerContextLock = manager.Lock()
+    PLEWordIdContextLock = manager.Lock()
+    minCosCacheLock = manager.Lock()
     
     verbosity = int(0)
     programIdentifier = ''
@@ -201,26 +203,23 @@ class LsaLM:
         plDen = cosSum - len(self.id2word) * minVal
         return (minId, minVal, cosSum, plDen)
     
-    def getCachedminCos(self,context,mcc=None):
-        if not mcc:
-            mcc = self.minCosCache
+    def getCachedminCos(self,context):
         result = 0
-        if context in mcc:
-            result = mcc[context]
+        if context in self.minCosCache:
+            result = self.minCosCache[context]
         else:
             mincos = self.minCos(context)
-            mcc[context] = mincos
-            pprint.pprint(mcc)
+            self.minCosCache[context] = mincos
             result = mincos
         return result
 
     def getCachedPLE(self,wordId,context,cache=True):
         comboString = ("%d %s" % (wordId, context))
         self.PLEWordIdContextLock.acquire()
+        result = 0
         if comboString in self.PLEWordIdContext:
             result = self.PLEWordIdContext[comboString]
             self.PLEWordIdContextLock.release()
-            return result
         else:
             self.PLEWordIdContextLock.release()
             (minId, minVal, cosSum, plDen) = self.getCachedminCos(context)
@@ -236,7 +235,8 @@ class LsaLM:
                 self.PLEWordIdContextLock.acquire()
                 self.PLEWordIdContext[comboString] = PLest
                 self.PLEWordIdContextLock.release()
-            return PLest
+            result = PLest
+        return result
 
     def parallelLCPBE(sef, info, queue, d, l):
         while True:
@@ -269,11 +269,11 @@ class LsaLM:
 #self.sumLSAConfPLEPerContext[context] = self.sumLSAConfPLEPerContext.get(context, 0) + pow(self.PL(wId, context), self.getPrecachedLSAConf(wId)) + pow(self.getSRILMProbs(context), 1-self.getPrecachedLSAConf(wId))
 
 
-        comboString = ("%d %s" % (wordId, context))
-            (minId, minVal, cosSum, plDen) = self.getCachedminCos(context)
-            wordCos = self.cos(wordId, context)
-            # FORMULA (4)
-            PLest = (wordCos - minVal) / plDen
+#        comboString = ("%d %s" % (wordId, context))
+#            (minId, minVal, cosSum, plDen) = self.getCachedminCos(context)
+#            wordCos = self.cos(wordId, context)
+#            # FORMULA (4)
+#            PLest = (wordCos - minVal) / plDen
 
 
 
@@ -285,11 +285,7 @@ class LsaLM:
                 return
 
             if wId and not context:
-                if wId < 0:
-                    self.condPrint(PrintLevel.GENERAL, "Processing %dth context in process %d" % (wId, pId))
-                    #self.printVariableLengths()
-                else:
-                    self.condPrint(PrintLevel.GENERAL, "Processing %dth element in process %d" % (wId, pId))
+                self.condPrint(PrintLevel.GENERAL, "Processing %dth context in process %d (len d:%d)" % (wId, pId,len(d)))
             else:
                 PLEst = self.getCachedPLE(wId, context,cache=False)
                 l.acquire()
@@ -621,12 +617,9 @@ class LsaLM:
         if self.readMinCosFile:
             self.condPrint(PrintLevel.STEPS, ">  Reading mincos from file")
             mcFile = open(self.readMinCosFile, 'rb')
-            self.minCosCache = pickle.load(mcFile)
-            #with open(self.readMinCosFile, 'r') as f:
-            #    for line in f:
-            #        l, r, a, b, c, d = line.rstrip().split('\t')
-            #        context = "%s\t%s" % (l, r)
-            #        self.minCosCache[context] = (a, b, c, d)
+            mcc = pickle.load(mcFile)
+            for k,v in mcc.iteritems():
+                self.minCosCache[k] = v
             mcFile.close()
         else:
             mcManager = Manager()
@@ -642,8 +635,6 @@ class LsaLM:
 
             for contextId, context in enumerate(self.contextCentroids):
                 mcQueue.put((contextId, context))
-                #if contextId > 30:
-                #    break
 
             for _ in range(self.threads):
                 mcQueue.put((None,None))
@@ -651,25 +642,21 @@ class LsaLM:
             for process in processes:
                 process.join()
 
-            print "%d elements in mcD" % len(mcD)
-            #self.minCosCache = mcD
-            self.minCosCache = {}
-            for k in mcD.keys():
-                self.minCosCache[k] = mcD[k]
+            self.minCosCache = mcD
             print "%d elements in mcc" % len(self.minCosCache)
-        self.condPrint(PrintLevel.TIME, " - Reading mincos took %f seconds" % (time.time() - mcStart))
+        self.condPrint(PrintLevel.TIME, " - Reading mincos (%d) took %f seconds" % (len(self.minCosCache), time.time() - mcStart))
         self.condPrint(PrintLevel.STEPS, "<  Done reading the mincos values")
 
         if self.writeMinCosFile and not self.readMinCosFile:
             self.condPrint(PrintLevel.STEPS, ">  Writing mincos to file")
             mcStart = time.time()
             mcFile = open(self.writeMinCosFile, 'wb')
-            pickle.dump(self.minCosCache, mcFile)
-            #for k in self.minCosCache.keys():
-            #    (a, b, c, d) = self.minCosCache.get(k, (0,0,0,0))
-            #    mcFile.write("%s\t%.16f\t%.16f\t%.16f\t%.16f\n" % (k, a, b, c, d))
+            mcc = {}
+            for k in self.minCosCache.keys():
+                mcc[k] = self.minCosCache[k]
+            pickle.dump(mcc, mcFile)
             mcFile.close()
-            self.condPrint(PrintLevel.TIME, " - Writing mincos took %f seconds" % (time.time() - mcStart))
+            self.condPrint(PrintLevel.TIME, " - Writing mincos (%d) took %f seconds" % (len(mcc), time.time() - mcStart))
             self.condPrint(PrintLevel.STEPS, "<  Done writing mincos to file")
 
         ### PLEs ########################################
@@ -680,7 +667,9 @@ class LsaLM:
         if self.readContextPLEsFile:
             self.condPrint(PrintLevel.STEPS, ">  Reading Context PLs from file")
             cpFile = open(self.readContextPLEsFile, 'rb')
-            self.sumPLEPerContext = pickle.load(cpFile)
+            sppc = pickle.load(cpFile)
+            for k,v in sppc.iteritems():
+                self.sumPLEPerContext[k] = v
             cpFile.close()
         elif self.plainPLEsFile:
             self.condPrint(PrintLevel.STEPS, ">  Reading tab-separated Context PLs from file")
@@ -695,38 +684,31 @@ class LsaLM:
             self.condPrint(PrintLevel.NORMAL, " >>> Starting parallel processing of PLEs")
 
 
-            pleManager = Manager()
-            pleD = pleManager.dict()
-            pleL = pleManager.Lock()
-            pleQueue = Queue()
+            pleD = self.manager.dict()
+            pleL = self.manager.Lock()
+            pleQ = Queue()
             processes = []
 
             for i in range(self.threads):
-                process = Process(target=self.parallelPLE, args=(i,pleQueue,pleD,pleL))
+                process = Process(target=self.parallelPLE, args=(i,pleQ,pleD,pleL))
                 processes.append(process)
                 process.start()
 
             placeInQueue = 0
             for contextId, context in enumerate(self.contextCentroids):
-                pleQueue.put((-contextId, None))
+                pleQ.put((-contextId, None))
                 for wId in self.id2word:
-                    #self.condPrint(PrintLevel.GENERAL, "<-x-> %d" % placeInQueue)
-                    if not placeInQueue % 10000:
-                       pleQueue.put((placeInQueue, None))
-                    pleQueue.put((wId, context))
+                    pleQ.put((wId, context))
                     placeInQueue += 1
 
             self.condPrint(PrintLevel.GENERAL, "Putting an end to this shit!")
             for _ in range(self.threads):
-                pleQueue.put((None, None))
+                pleQ.put((None, None))
             
             for process in processes:
                 process.join()
 
-            #self.sumPLEPerContext = pleD
-            sumPLEPerContext = {}
-            for k in pleD.keys():
-                sumPLEPerContext[k] = pleD[k]
+            self.sumPLEPerContext = pleD
 
             self.condPrint(PrintLevel.NORMAL, " <<< Done with parallel processing of PLEs")
 
@@ -737,7 +719,10 @@ class LsaLM:
             self.condPrint(PrintLevel.STEPS, ">  Writing Context PLs to file")
             cWriteStart = time.time()
             cpFile = open(self.writeContextPLEsFile, 'wb')
-            pickle.dump(self.sumPLEPerContext, cpFile)
+            sppc = {}
+            for k in self.sumPLEPerContext.keys():
+                sppc[k] = pleD[k]
+            pickle.dump(sppc, cpFile)
             cpFile.close()
             self.condPrint(PrintLevel.TIME, " - Writing Context PLs took %f seconds" % (time.time() - cWriteStart))
             self.condPrint(PrintLevel.STEPS, "<  Done writing Context PLs to file")
