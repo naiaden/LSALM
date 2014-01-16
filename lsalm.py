@@ -46,19 +46,6 @@ class LsaLM:
     pleProcesses = []
 
 
-    
-    contextCentroids = {} # contains the centroid vector of a context
-    PLEWordIdContext = manager.dict(lock=False) # contains the PL estimate value for a word id and a context
-    sumPLEPerContext = manager.dict(lock=False) # contains the PL estimate sum for a context
-    sumLSAConfPLEPerContext = {} # contains the sum(PL(j)*LsaConf(j)) for a context
-    
-    
-    srilmContext = {} # contains 
-    sumLSAConfPBEPerContext = {}
-    srilmProbs = {}
-
-    def printVariableLengths(self):
-        print "%s %d [%d], %s %d, %s %d, %s %d, %s %d, %s %d [%d], %s %d, %s %d, %s %d" % ("mcc", len(self.minCosCache), sys.getsizeof(pickle.dumps(self.minCosCache)),  "cc", len(self.corpusCounts), "lccn", len(self.LSAConfCacheNoms), "cxc", len(self.contextCentroids), "pwid", len(self.PLEWordIdContext), "spc", len(self.sumPLEPerContext), sys.getsizeof(pickle.dumps(self.sumPLEPerContext)), "slcpc", len(self.sumLSAConfPLEPerContext), "sc", len(self.srilmContext), "sp", len(self.srilmProbs))
 
     sumPLEPerContextLock = manager.Lock()
     PLEWordIdContextLock = manager.Lock()
@@ -74,7 +61,7 @@ class LsaLM:
     normfile = ''
     gamma = float(7.0)
     dimensions = 150
-    trainFile = ''
+    testFile = ''
 
     srilmProbsDirectory = ''
     readContextIndexFile = ''
@@ -190,27 +177,34 @@ class LsaLM:
         self.condPrint(PrintLevel.NORMAL, "-t, --test f               read lines to apply trained model on", addPrefix=False)
         self.condPrint(PrintLevel.NORMAL, "-s, --save f               save output (probability and lsa confidence) to file f", addPrefix=False)
 
-    def cos(self,wordId,context):
+    def cos(self,wordId,C):
         w = self.lsi.projection.u[wordId]
-        C = self.contextCentroids[context]
+        #C = self.getCentroid(context)
 
-        nom = numpy.dot(w,C)
-        det1 = numpy.linalg.norm(w)
-        det2 = numpy.linalg.norm(C)
-        if math.isnan(nom) or math.isnan(det1) or math.isnan(det2) or det1 == 0 or det2 == 0 or nom == 0:
-            return 0
-        if det1*det2 <= 0:
-            raise InvalidValueError(Fore.RED + "The normalisation of the cos function shouldn't be <= 0!\nValue: %f\nWord: %s\nContext: %s" % (det1*det2, self.id2word[wordId], context))
-        # FORMULA (2)
-        val = nom/(det1*det2)
-        return 0 if math.isnan(val) else val
+        result = 0
+
+        if C is not None:
+            nom = numpy.dot(w,C)
+            det1 = numpy.linalg.norm(w)
+            det2 = numpy.linalg.norm(C)
+            if math.isnan(nom) or math.isnan(det1) or math.isnan(det2) or det1 == 0 or det2 == 0 or nom == 0:
+                return 0
+            elif det1*det2 <= 0:
+                raise InvalidValueError(Fore.RED + "The normalisation of the cos function shouldn't be <= 0!\nValue: %f\nWord: %s\nContext: %s" % (det1*det2, self.id2word[wordId], context))
+            # FORMULA (2)
+            else:
+                val = nom/(det1*det2)
+                if not math.isnan(val):
+                    result = val
+        
+        return result
     
-    def minCos(self,context):
+    def minCos(self,contextCentroid):
         minVal = 0
         minId = 0
         cosSum = 0
         for wId in self.id2word:
-            val = self.cos(wId, context)
+            val = self.cos(wId, contextCentroid)
             cosSum += val
             # FORMULA (3)
             if(val < minVal):
@@ -288,66 +282,35 @@ class LsaLM:
             elif opt in ('-v', '--verbosity'):
                 self.verbosity = int(arg)               
 
-            elif opt in ('-e', '--evaluatepart'):
-                self.evaluatePart = int(arg)
-            elif opt in ('-T', '--thousand'):
-                self.taskParts = 1000
-            elif opt in ('-g', '--gamma'):
-                self.gamma = float(arg)
-            elif opt in ('-k', '--dimensions'):
-                self.dimensions = arg
-            elif opt in ('-t', '--train'):
-                self.trainFile = arg
-                
-            elif opt in ('-w', '--write'):
-                self.writeLSAFile = arg
             elif opt in ('-r', '--read'):
                 self.readLSAFile = arg
-            elif opt in ('-s', '--save'):
-                self.outputFile = arg
-
+            elif opt in ('-w', '--write'):
+                self.writeLSAFile = arg
 
             elif opt in ('-c', '--readcount'):
                 self.readWordCountFile = arg
             elif opt in ('-C', '--writecount'):
                 self.writeWordCountFile = arg
-            elif opt in ('-x', '--readcontexts'):
-                self.readContextsFile = arg
-            elif opt in ('-X', '--writecontexts'):
-                self.writeContextsFile = arg
+                
             elif opt in ('-l', '--readlsaconf'):
                 self.readLSAConfFile = arg
             elif opt in ('-L', '--writelsaconf'):
-                self.writeLSAConfFile = arg
-            elif opt in ('-p', '--readples'):
-                self.readContextPLEsFile = arg
-            elif opt in ('-P', '--writeples'):
-                self.writeContextPLEsFile = arg
-            elif opt in ('-q', '--plainples'):
-                self.plainPLEsFile = arg
-            elif opt in ('-Q', '--parallelple'):
-                self.parallelPLEsFile = arg
-            elif opt in ('-j', '--readlcples'):
-                self.readContextLSAConfPLEsFile = arg
-            elif opt in ('-J', '--writelcples'):
-                self.writeContextLSAConfPLEsFile = arg
-            elif opt in ('-b', '--plainlcples'):
-                self.plainLSAConfPLEsFile = arg
-            elif opt in ('-B', '--parallellcple'):
-                self.parallelLSAConfPLEsFile = arg
-            
-            elif opt in ('-S', '--srilm'):
-                self.srilmProbsDirectory = arg
+                self.writeLSAConfFile = arg                
+
             elif opt in ('-y', '--contextindex'):
                 self.readContextIndexFile = arg
-            elif opt in ('-z', '--readmincos'):
-                self.readMinCosFile = arg
-            elif opt in ('-Z', '--writemincos'):
-                self.writeMinCosFile = arg
-            elif opt in ('-r', '--readpcpbes'):
-                self.readContextLSAConfPBEsFile = arg
-            elif opt in ('-R', '--writepcpbes'):
-                self.writeContextLSAConfPBEsFile = arg
+            elif opt in ('-S', '--srilm'):
+                self.srilmProbsDirectory = arg
+                
+            elif opt in ('-t', '--test'):
+                self.testFile = arg                              
+             elif opt in ('-s', '--save'):
+                self.outputFile = arg               
+                
+            elif opt in ('-g', '--gamma'):
+                self.gamma = float(arg)
+            elif opt in ('-k', '--dimensions'):
+                self.dimensions = arg
        
         init(autoreset=True)
 
@@ -356,104 +319,131 @@ class LsaLM:
         self.condPrint(PrintLevel.GENERAL, "Corpus file: %s" % self.mmfile)
         self.condPrint(PrintLevel.GENERAL, "Distributed: %s" % ("Yes" if self.distributed else "No"))
         self.condPrint(PrintLevel.GENERAL, "Dictionary file: %s" % self.dictfile)
-        self.condPrint(PrintLevel.GENERAL, "Read contexts from: %s" % self.readContextsFile)
-        self.condPrint(PrintLevel.GENERAL, "Write contexts to: %s" % self.writeContextsFile)
-        self.condPrint(PrintLevel.GENERAL, "Read word counts from: %s" % self.readWordCountFile)
-        self.condPrint(PrintLevel.GENERAL, "Write word counts to: %s" % self.writeWordCountFile)
-        self.condPrint(PrintLevel.GENERAL, "Read LSA confidence values from: %s" % self.readLSAConfFile)
-        self.condPrint(PrintLevel.GENERAL, "Write LSA confidence values to: %s" % self.writeLSAConfFile)
-        self.condPrint(PrintLevel.GENERAL, "Gamma: %f" % self.gamma)
-        self.condPrint(PrintLevel.GENERAL, "Dimensions: %s" % self.dimensions)
-        self.condPrint(PrintLevel.GENERAL, "Evaluate on: %s" % self.trainFile)
-        self.condPrint(PrintLevel.GENERAL, "SRILM n-gram probabilities in: %s" % self.srilmProbsDirectory)
+        
+        self.condPrint(PrintLevel.GENERAL, "Verbosity level: %s" % self.verbosity)
+        
         self.condPrint(PrintLevel.GENERAL, "Save LSA in: %s" % self.writeLSAFile)
         self.condPrint(PrintLevel.GENERAL, "Read LSA from: %s" % self.readLSAFile)
-        self.condPrint(PrintLevel.GENERAL, "Read Context PL estimates from: %s" % self.readContextPLEsFile)
-        self.condPrint(PrintLevel.GENERAL, "Write Context PL estimates to: %s" % self.writeContextPLEsFile)
-        self.condPrint(PrintLevel.GENERAL, "Write tab-separated PLEs to f")
-        self.condPrint(PrintLevel.GENERAL, "Read from tab-separated PLEs from f")
+        
+        self.condPrint(PrintLevel.GENERAL, "Read word counts from: %s" % self.readWordCountFile)
+        self.condPrint(PrintLevel.GENERAL, "Write word counts to: %s" % self.writeWordCountFile)
+        
+        self.condPrint(PrintLevel.GENERAL, "Read LSA confidence values from: %s" % self.readLSAConfFile)
+        self.condPrint(PrintLevel.GENERAL, "Write LSA confidence values to: %s" % self.writeLSAConfFile)
+        
+        self.condPrint(PrintLevel.GENERAL, "Gamma: %f" % self.gamma)
+        self.condPrint(PrintLevel.GENERAL, "Dimensions: %s" % self.dimensions)
+        
+        self.condPrint(PrintLevel.GENERAL, "Context index: %s" % self.readContextIndexFile)
+        self.condPrint(PrintLevel.GENERAL, "SRILM n-gram probabilities in: %s" % self.srilmProbsDirectory)
+        
+        self.condPrint(PrintLevel.GENERAL, "Evaluate on: %s" % self.testFile)
         self.condPrint(PrintLevel.GENERAL, "Write output to: %s" % self.outputFile)
-        self.condPrint(PrintLevel.GENERAL, "Write mincos to: %s" % self.writeMinCosFile)
-        self.condPrint(PrintLevel.GENERAL, "Read mincos from: %s" % self.readMinCosFile)
-        self.condPrint(PrintLevel.GENERAL, "Read context-index SRILM files from: %s" % self.srilmProbsDirectory)
-        self.condPrint(PrintLevel.GENERAL, "Evaluate only part %s of %s" % (self.evaluatePart, self.taskParts))
-        self.condPrint(PrintLevel.GENERAL, "Verbosity level: %s" % self.verbosity)
+        
+        
 
-
-    def getSRILMProb(self, wId, context, lsaconf=1.0):
-        word = self.id2word[wId]
-        contextId = contextsToId[context]
-        result = 0
-#        if context not in srilmContext:
-        with open("%s/context.%d" % (self.srilmProbsDirectory, contextId), 'r') as f:
-            contextSum = 0
-            for line in f:
-                localContext, logprob = line.rstrip().split('\t')
-                if context == localContext:
-                    result = math.exp(logprob)
-                prob = math.exp(logprob)
-                contextSum += pow(prob, 1-lsaconf)
-            srilmContext[context] = contextSum
-        return result
-
-    def processContext(self, pId, queue, ):
+    def writeToFile(self, queue, ):
+        if self.outputFile:
+            fh = open(self.outputFile, 'w')
+            while True:
+                text = queue.get()
+                if not text:
+                    fh.close()
+                    return
+            
+                fh.write("%s\n" % text)
+        else:
+            while True:
+                text = queue.get()
+                if not text:
+                    return       
+                print text
+            
+    def processContext(self, pId, queue, queueOut):
         while True:
-            text = queue.get()
-            if not text:
+            context = queue.get()
+            if not context:
                 return       
+   
+            cIdx = self.contextIndex.get(context, None) 
             
-            context = self.getContext(text)         
+            pcontext = context.replace('\t', ' ').rstrip()
+            pIdx = self.pcontextIndex.get(pcontext, None) 
+ 
+            focusWords = self.contextFocusWords.get(cIdx, [])
+            if cIdx is not None and pIdx is not None and len(focusWords) > 0:
+                #self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context (%d) %s" % (pId, cIdx, context))
 
-            cIdx = self.contextIndex[context]  
-            focusWords = self.contextFocusWords[cIdx]
-            if len(focusWords) > 0:
+                cIdx = int(cIdx)
+                pIdx = int(pIdx)
 
-                
-
-                self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context %s" % (cIdx, context))
-
-                centroid = self.getCentroid(text)
-            
                 ### PL PART ###################################
-            
-                (minId, minVal, cosSum, plDen) = self.minCos(context) 
+
+                contextCentroid = self.getCentroid(context)
+                (minId, minVal, cosSum, plDen) = self.minCos(contextCentroid)          
             
                 PLestCache = {}
                 sumPLest = 0
             
                 for wId in self.id2word:                 
-                    wordCos = self.cos(wordId, context)
-                    PLest = (wordCos - minVal) / plDen
+                    wordCos = self.cos(wId, contextCentroid)
+                    PLest = 0
+                    if plDen:
+                        PLest = (wordCos - minVal) / plDen
                     PLestCache[wId] = PLest
                     sumPLest += PLest
 
                 PLCache = {}
             
                 for wId in self.id2word:
-                    PL = pow(PLestCache[wId], self.gamma) / pow(sumPLest, self.gamma)
+                    PL = 0
+                    if PLestCache[wId]:
+                        PL = pow(PLestCache[wId], self.gamma) / pow(sumPLest, self.gamma)
                     PLCache[wId] = PL
             
                 ### PB PART ###################################
+          
+                PBCache = {}
+                sumPB = 0
                 
-                pIdx = self.contextPcontext[cIdx]
-                if pIdx:
-                    with open("%s/context.%d" % (self.srilmProbsDirectory, pIdx), 'r') as f:
-                        # todo
-            
-                    sumPLPB = 0
-            
-                    for wId in self.id2word:
-                        sumPLPB += pow(PLCache[wId], LSAConfCacheNoms[wId])*pow(PB(wId), 1-LSAConfCacheNoms[wId])
-            
-                    for fwId in focusWords:
-                        pow(PLCache[fwId], LSAConfCacheNoms[fwId]) * pow(PB(fwId), 1-LSAConfCacheNoms[fwId]) / sumPLPB
-            else:
-                self.condPrint(PrintLevel.GENERAL, "   -- [%d] Not processing context %s because it has no focus words" % (pId, context))
-            
-            
-            
+                with open("%s/context.%d" % (self.srilmProbsDirectory, pIdx), 'r') as f:
+                    for line in f:
+                        text, logprob = line.rstrip().split('\t')
+                        
+                        focusWord = self.getFocusWord(text)
+                        
+                        logprob = float(logprob)
+                        
+                        PB = math.exp(logprob)                            
+                        PBCache[focusWord] = PB     
+                        sumPB += PB                                      
         
-
+                sumPLPB = 0
+        
+                for wId in self.id2word:
+                    lc = self.LSAConfCacheNoms[wId-1]
+                    word = self.id2word[wId]
+                    PL = PLCache[wId]
+                    PB =  PBCache[word]
+                    sumPLPB += pow(PL, lc)*pow(PB, 1-lc)
+        
+                for fwId in focusWords:
+                    lc = self.LSAConfCacheNoms[fwId-1]
+                    
+                    word = self.id2word[fwId]
+                    PL = PLCache[fwId]
+                    PB =  PBCache[word]
+                    
+                    P = 0
+                    if sumPLPB:
+                        P = pow(PL, lc) * pow(PB, 1-lc) / sumPLPB
+                    
+                    #print fwId, self.id2word[fwId], P
+                    text = self.getText(context, word)
+                    queueOut.put("%s\t%.16f\t%.16f\t%.16f\t%.16f" % (text, P, PL, PB, lc))
+            else:
+                pass
+                #self.condPrint(PrintLevel.GENERAL, "   -- [%d] Not processing context %s because it has no focus words" % (pId, context))
 
     def buildSpace(self):
 
@@ -571,8 +561,8 @@ class LsaLM:
         
         rcStart = time.time()
         if self.readContextIndexFile:
-            with open(self.trainFile, 'r') as f:
-                cidx = 20
+            with open(self.testFile, 'r') as f:
+                cidx = 0
                 for line in f:
                     text = line.rstrip()
                     ctx = self.getContext(text)
@@ -582,8 +572,8 @@ class LsaLM:
                         
                         pctx = ctx.replace('\t', ' ').rstrip()
                         pidx = self.pcontextIndex.get(pctx, None)
-                        if pidx:
-                            self.contextPcontext[idx] = pidx
+                        if pidx is not None:
+                            self.contextPcontext[cidx] = pidx
  
                     fw = self.getFocusWord(text)
                     idx = self.contextIndex[ctx]
@@ -608,33 +598,35 @@ class LsaLM:
         cpStart = time.time()
         
         contextQueue = Queue()
-        processes = []
+        contextProcesses = []
+        
+        writeQueue = Queue()
+        writeProcess = Process(target=self.writeToFile, args=(writeQueue,))
+        writeProcess.start()
 
         for i in range(self.threads):
-            process = Process(target=self.processContext, args=(i,contextQueue,))
-            processes.append(process)
+            process = Process(target=self.processContext, args=(i,contextQueue,writeQueue))
+            contextProcesses.append(process)
             process.start()
         
-        if self.trainFile:
-            with open(self.trainFile, 'r') as f:
-                for line in f:
-                    text = line.rstrip()
-                    contextQueue.put(text)
-                    
+        if self.testFile:
+            for context in self.contextIndex.keys():
+                 contextQueue.put(context)
+                
+            #    self.condPrint(PrintLevel.STEPS, "   %d test instances on the queue" % testInstances)    
                     
         
 
-        for _ in processes:
+        for _ in contextProcesses:
             contextQueue.put(None)
 
-        for process in processes:
+        for process in contextProcesses:
             process.join()
+            
+        writeQueue.put(None)
+        writeProcess.join()
 
         self.condPrint(PrintLevel.TIME, " - Processing contexts took %f seconds" % (time.time() - cpStart))
         self.condPrint(PrintLevel.STEPS, "<  Done processing contexts")
-        
-    def close(self):
-        if self.outputFile:
-            self.of.close()
 
 
