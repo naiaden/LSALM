@@ -44,12 +44,6 @@ class LsaLM:
 
     pleQ = Queue()
     pleProcesses = []
-
-
-
-    sumPLEPerContextLock = manager.Lock()
-    PLEWordIdContextLock = manager.Lock()
-    minCosCacheLock = manager.Lock()
     
     verbosity = int(0)
     programIdentifier = ''
@@ -66,127 +60,26 @@ class LsaLM:
     srilmProbsDirectory = ''
     readContextIndexFile = ''
 
-    parallelPLEsFile = ''
-    plainPLEsFile = ''
-    parallelLSAConfPLEsFile = ''
-    plainLSAConfPLEsFile = ''
-
     writeLSAFile = ''
     readLSAFile = ''
     outputFile = ''
-    readContextPLEsFile = ''
-    writeContextPLEsFile = ''
-    readContextLSAConfPLEsFile = ''
-    writeContextLSAConfPLEsFile = ''
-    readContextLSAConfPBEsFile = ''
-    writeContextLSAConfPBEsFile = ''
-    readMinCosFile = ''
-    writeMinCosFile = ''
-    readContextsFile = ''
-    writeContextsFile = ''
     readWordCountFile = ''
     writeWordCountFile = ''
     readLSAConfFile = ''
-    writeLSAConfFile = ''
-    readNormalisationFile = ''
-    writeNormalisationFile = ''
-
-    taskParts = 100
-    evaluatePart = int(-1)
-  
+    writeLSAConfFile = ''  
  
     def printHelp(self):
-        self.condPrint(PrintLevel.EVERYTHING, "The LSA Language Model comprises 7 steps. Several steps may take a lot of time,", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "therefore it offers functionality to save intermediate results.", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-h, --help                 print this text and exit", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-i, --id s                 give the program an id, useful for output of parallel processes", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-v, --verbosity n          set verbosity level (default=0)", addPrefix=False)    
-        self.condPrint(PrintLevel.NORMAL, "                           (0=normal, 1=general, 2=steps, 3=time, 4=specific, 5=everything)", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-I, --threads n            the number of threads used in parallel computations (default=24)", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- Dictionary and Corpus", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "First, the dictionary and corpus are loaded. Even if the LSA Space created from", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "these files is saved, dictionary and corpus files are mandatory. See createIndex.py", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "on how to create these files", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-m, --mfile f              read corpus file from f (in matrix market format)", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-d, --dfile f              read dictionary from f", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- LSA Space", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "Then a LSA Space is built. We use gensim, so make sure it is installed. If you want", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "to run a distributed version, install it according to http://radimrehurek.com/gensim/dist_lsi.html", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "If -x is provided, it reads the model from file, otherwise a new model is computed.", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-D, --distributed          use the distributed version of gensim", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-k, --dimensions n         the number of dimensions after SVD (default=150)", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-w, --write f              write LSA model to file f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-r, --read f               read LSA from file f", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- Word Counts", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "To avoid counting the words over and over again, we cache the word counts. This", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "cache can also be saved to file with -X. If -x is provided, the word counts are.", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "retrieved from the file")
-        self.condPrint(PrintLevel.NORMAL, "-c, --readcount f          read word count file from f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-C, --writecount f         write word count to file f", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- LSA Confidence Values", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "The LSA Confidence Values can be precomputed for a corpus", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-l, --readlsaconf f        read lsa confidence values from f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-L, --writelsaconf f       write lsa condifence values to f", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- Read Contexts", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "In many stages we need a mapping between contexts and their centroids in the LSA", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "Space. Therefore we read all the contexts and centroids beforehand.", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-x, --readcontexts f       read contexts from f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-X, --writecontexts f      write contexts to f", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- LSA Probability Estimates (PLEs)", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "The LSA LM uses a technique to increase the dynamic range, with parameter gamma.", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "To normalise the probabilities based on these estimates, we have to sum over the", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "context probabilities: PLEs. If you want to computes these in parallel, use -Q. This", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "will output tab-separated (plain) output to a file, which can be compined with other", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-Q's, with a simple concatenation. This can then be read with -q. Generating these", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "PLEs generally takes a long time. However, if you want to run it with 1 process, use", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-P and -p. These are binary formats. You can read with -q and save with -P to a", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "binary file. If you use -Q, you can choose which part you want to do in the process.", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "Choose part n of 100 with -e n, (or of 1000 if -T -e n).", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-g, --gamma n              gamma parameter for dynamic range scaling (default=7.0)", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-Q, --parallelple f        write intermediate step to f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-q, --plainples f          read plain pl estimates (e.g. multiple -Q)", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-p, --readples f           read context pl estimates from f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-P, --writeples f          write context pl estimates to file f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-T, --thousand             divide task in 1000 pieces, rather than the default 100", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-e, --evaluatepart n       evaluate subset n (of 100, unless -T), all=-1 (default=-1)", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- Mincos", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "Since the mincos (and related) values are not dependent of the words, we can precompute them.", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-z, --readmincos f         read the mincos values from f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-Z, --writemincos f        write the mincos values to f", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- LSA Probability multiplied with LSA Confidence value", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "Similar to the previous block, but now the probabilities are not longer", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "estimates, and we multiply the values with their corresponding lsa confidence", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-e can still be used", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-B, --parallellcple f      write intermediate lc pl step to f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-b, --plainlcples f        read plain lc pl estimates (e.g. multiple -Q)", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-j, --readlcples f         read context lc pl estimates from f", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-J, --writelcples f        write context lc pl estimates to file f", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "-- Applying the rules", addPrefix=False)
-        self.condPrint(PrintLevel.EVERYTHING, "The last phase is about applying the rules to new data", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-S, --srilm f              contains the srilm n-gram logprobs (tab separated)")
-        self.condPrint(PrintLevel.NORMAL, "-t, --test f               read lines to apply trained model on", addPrefix=False)
-        self.condPrint(PrintLevel.NORMAL, "-s, --save f               save output (probability and lsa confidence) to file f", addPrefix=False)
+        self.condPrint(PrintLevel.NORMAL, "Nothing to see here at the moment. Look inside the file")
 
-    def cos(self,wordId,C):
+    def cos(self,wordId,contextCentroid):
         w = self.lsi.projection.u[wordId]
-        #C = self.getCentroid(context)
 
         result = 0
 
-        if C is not None:
-            nom = numpy.dot(w,C)
+        if contextCentroid is not None:
+            nom = numpy.dot(w,contextCentroid)
             det1 = numpy.linalg.norm(w)
-            det2 = numpy.linalg.norm(C)
+            det2 = numpy.linalg.norm(contextCentroid)
             if math.isnan(nom) or math.isnan(det1) or math.isnan(det2) or det1 == 0 or det2 == 0 or nom == 0:
                 return 0
             elif det1*det2 <= 0:
@@ -259,7 +152,7 @@ class LsaLM:
 
     def __init__(self, cmdArgs):
         try:
-            opts, args = getopt.getopt(cmdArgs, 'hi:I:Dm:x:X:d:g:k:t:w:r:s:v:c:C:l:L:n:N:Te:p:P:Q:q:j:J:B:b:S:y:z:Z:r:R:', ['help', 'id=', 'threads=', 'distributed', 'mfile=', 'readcontexts=', 'writecontexts', 'dfile=', 'gamma=', 'dimensions=','test=', 'write=', 'read=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'thousand', 'evaluatepart=', 'readples=', 'writeples=', 'parallelple=', 'plainples=', 'readlcples=', 'writelcples=', 'parallellcple=', 'plainlcples=', 'srilm=', 'contextindex=', 'readmincos=', 'writemincos=', 'readlcpbes=', 'writelcpbes=' ])
+            opts, args = getopt.getopt(cmdArgs, 'hI:T:Dm:d:v:r:w:c:C:l:L:s:S:i:o:g:k:', ['help', 'id=', 'threads=', 'distributed', 'mfile=', 'dfile=', 'gamma=', 'dimensions=', 'test=', 'read=', 'write=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'srilm=', 'contextindex='])
         except getopt.GetoptError:
             self.printHelp()
             sys.exit(2)
@@ -269,9 +162,9 @@ class LsaLM:
                 self.verbosity = (5)
                 self.printHelp()
                 sys.exit()
-            if opt in ('-i', '--id'):
+            if opt in ('-I', '--id'):
                 self.programIdentifier = arg
-            if opt in ('-I', '--threads'):
+            if opt in ('-T', '--threads'):
                 self.threads = int(arg)
             elif opt in('-D', '--distributed'):
                 self.distributed = True
@@ -297,14 +190,14 @@ class LsaLM:
             elif opt in ('-L', '--writelsaconf'):
                 self.writeLSAConfFile = arg                
 
-            elif opt in ('-y', '--contextindex'):
+            elif opt in ('-s', '--contextindex'):
                 self.readContextIndexFile = arg
             elif opt in ('-S', '--srilm'):
                 self.srilmProbsDirectory = arg
                 
-            elif opt in ('-t', '--test'):
+            elif opt in ('-i', '--test'):
                 self.testFile = arg                              
-             elif opt in ('-s', '--save'):
+            elif opt in ('-o', '--save'):
                 self.outputFile = arg               
                 
             elif opt in ('-g', '--gamma'):
@@ -391,14 +284,18 @@ class LsaLM:
                     if plDen:
                         PLest = (wordCos - minVal) / plDen
                     PLestCache[wId] = PLest
+                    #self.condPrint(PrintLevel.GENERAL, "%.16f contributed by: %s" % (PLest, self.id2word[wId]))
                     sumPLest += PLest
+
+                #self.condPrint(PrintLevel.GENERAL, "Which sums up to %.16f sumPLest" % (sumPLest))
 
                 PLCache = {}
             
                 for wId in self.id2word:
                     PL = 0
-                    if PLestCache[wId]:
+                    if PLestCache.get(wId, None) is not None:
                         PL = pow(PLestCache[wId], self.gamma) / pow(sumPLest, self.gamma)
+                    #self.condPrint(PrintLevel.GENERAL, "%.16f -> %.16f by: %s" % (PLestCache[wId], PL, self.id2word[wId]))    
                     PLCache[wId] = PL
             
                 ### PB PART ###################################
@@ -421,14 +318,14 @@ class LsaLM:
                 sumPLPB = 0
         
                 for wId in self.id2word:
-                    lc = self.LSAConfCacheNoms[wId-1]
+                    lc = self.getPrecachedLSAConf(wId)
                     word = self.id2word[wId]
                     PL = PLCache[wId]
                     PB =  PBCache[word]
                     sumPLPB += pow(PL, lc)*pow(PB, 1-lc)
         
                 for fwId in focusWords:
-                    lc = self.LSAConfCacheNoms[fwId-1]
+                    lc = self.getPrecachedLSAConf(fwId)
                     
                     word = self.id2word[fwId]
                     PL = PLCache[fwId]

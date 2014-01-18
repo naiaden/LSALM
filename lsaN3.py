@@ -16,9 +16,6 @@ from lsalm import LsaLM
 from lsalm import PrintLevel
 from colorama import init, Fore, Back, Style
 
-#logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-
-
 class LsaLMN3(LsaLM):
   
     def getText(self, context, word):
@@ -30,7 +27,13 @@ class LsaLMN3(LsaLM):
         leftContext = ' '.join(words[0:2])
         rightContext = ''
         return leftContext + '\t' + rightContext
-    
+   
+    def getPcontext(self, text):
+        words = text.split()
+        leftContext = ' '.join(words[0:2])
+        rightContext = ''
+        return leftContext + ' ' + rightContext
+
     def getFocusWord(self, text):
         words = text.split()
         return words[2]
