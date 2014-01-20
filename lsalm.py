@@ -36,8 +36,8 @@ class LsaLM:
     LSAConfCacheNoms = {} # contains the lsa confidence value of a word id
     pcontextIndex = {}    # contains the plain contexts
     contextIndex = {}     # contains the contexts
-    contextPcontext ={}  # contains the link between cId and pcId
     contextFocusWords = {}# contains the wId's of focus words in the cId
+    contextWithTexts = {}
 
     mcQ = Queue()
     mcProcesses = []
@@ -258,28 +258,17 @@ class LsaLM:
             if not context:
                 return       
   
-            self.condPrint(PrintLevel.GENERAL, "-----")
-
-            self.condPrint(PrintLevel.GENERAL, "   -- [%d] context: %s" % (pId, context))
+#            self.condPrint(PrintLevel.GENERAL, "-----")
 
             cIdx = self.contextIndex.get(context, None) 
             
-            self.condPrint(PrintLevel.GENERAL, "   -- [%d] cIdx (%s)" % (pId, cIdx))
+            #self.condPrint(PrintLevel.GENERAL, "   -- [%d] context (%s): %s" % (pId, cIdx context))
             
-            pcontext = self.getPcontext(context)
-
-            self.condPrint(PrintLevel.GENERAL, "   -- [%d] pcontext: %s" % (pId, pcontext))
-
-            pIdx = self.pcontextIndex.get(pcontext, None) 
-            
-            self.condPrint(PrintLevel.GENERAL, "   -- [%d] pIdx (%s)" % (pId, pIdx))
- 
-            focusWords = self.contextFocusWords.get(cIdx, [])
-            if cIdx is not None and pIdx is not None and len(focusWords) > 0:
+            texts = self.contextWithTexts.get(cIdx, [])
+            if cIdx is not None and len(texts) > 0:
                 self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context (%d) %s" % (pId, cIdx, context))
 
                 cIdx = int(cIdx)
-                pIdx = int(pIdx)
 
                 ### PL PART ###################################
 
@@ -304,51 +293,72 @@ class LsaLM:
             
                 for wId in self.id2word:
                     PL = 0
-                    if PLestCache.get(wId, None) is not None:
+                    if PLestCache.get(wId, None) is not None and sumPLest > 0:
                         PL = pow(PLestCache[wId], self.gamma) / pow(sumPLest, self.gamma)
                     #self.condPrint(PrintLevel.GENERAL, "%.16f -> %.16f by: %s" % (PLestCache[wId], PL, self.id2word[wId]))    
                     PLCache[wId] = PL
             
-                ### PB PART ###################################
-          
-                PBCache = {}
-                sumPB = 0
+                for text in texts: # we can also put this check somewhat higher, so we don't compute PL for the cat's ass                  
                 
-                with open("%s/context.%d" % (self.srilmProbsDirectory, pIdx), 'r') as f:
-                    for line in f:
-                        text, logprob = line.rstrip().split('\t')
-                        
-                        focusWord = self.getFocusWord(text)
-                        
-                        logprob = float(logprob)
-                        
-                        PB = math.exp(logprob)                            
-                        PBCache[focusWord] = PB     
-                        sumPB += PB                                      
-        
-                sumPLPB = 0
-        
-                for wId in self.id2word:
-                    lc = self.getPrecachedLSAConf(wId)
-                    word = self.id2word[wId]
-                    PL = PLCache[wId]
-                    PB =  PBCache[word]
-                    sumPLPB += pow(PL, lc)*pow(PB, 1-lc)
-        
-                for fwId in focusWords:
-                    lc = self.getPrecachedLSAConf(fwId)
+                    pcontext = self.getPcontext(text)
+                    pIdx = self.pcontextIndex.get(pcontext, None)
                     
-                    word = self.id2word[fwId]
-                    PL = PLCache[fwId]
-                    PB =  PBCache[word]
+                    if pIdx is not None:
                     
-                    P = 0
-                    if sumPLPB:
-                        P = pow(PL, lc) * pow(PB, 1-lc) / sumPLPB
-                    
-                    #print fwId, self.id2word[fwId], P
-                    text = self.getText(context, word)
-                    queueOut.put("%s\t%.16f\t%.16f\t%.16f\t%.16f" % (text, P, PL, PB, lc))
+                        pIdx = int(pIdx)
+                     
+                        ### PB PART ###################################
+          
+                        PBCache = {}
+                        sumPB = 0
+
+                        with open("%s/context.%d" % (self.srilmProbsDirectory, pIdx), 'r') as f:
+                            for line in f:
+                                ltext, logprob = line.rstrip().split('\t')
+                        
+                                focusWord = self.getFocusWord(ltext)
+                        
+                                logprob = float(logprob)
+                        
+                                PB = math.exp(logprob)                            
+                                PBCache[focusWord] = PB     
+                                sumPB += PB                                      
+        
+                        sumPLPB = 0
+        
+                        for wId in self.id2word:
+                            lc = self.getPrecachedLSAConf(wId)
+                            word = self.id2word[wId]
+                            PL = PLCache[wId]
+                            PB =  PBCache[word]
+                            sumPLPB += pow(PL, lc)*pow(PB, 1-lc)
+        
+                        ### INTERPOLATION PART ########################
+        
+                        fw = self.getFocusWord(text)
+                        fwId = self.id2word.doc2bow(fw.split())[0][0]
+                        
+                        
+#                        self.condPrint(PrintLevel.GENERAL, "    text: %s" % (text))
+#                        self.condPrint(PrintLevel.GENERAL, " context: %s (%d)" % (context, cIdx))
+#                        self.condPrint(PrintLevel.GENERAL, "pcontext: %s (%d)" % (pcontext, pIdx))
+#                        self.condPrint(PrintLevel.GENERAL, "   focus: %s (%d)" % (fw, fwId))
+
+
+#                        self.condPrint(PrintLevel.GENERAL, ">>>>>> %s (%s)" % (fw, fwId))
+        
+                        lc = self.getPrecachedLSAConf(fwId)
+                
+                        word = self.id2word[fwId]
+                        PL = PLCache[fwId]
+                        PB =  PBCache[word]
+                
+                        P = 0
+                        if sumPLPB:
+                            P = pow(PL, lc) * pow(PB, 1-lc) / sumPLPB
+                
+                        #print fwId, self.id2word[fwId], P
+                        queueOut.put("%s\t%.16f\t%.16f\t%.16f\t%.16f" % (text, P, PL, PB, lc))
             else:
                 pass
                 #self.condPrint(PrintLevel.GENERAL, "   -- [%d] Not processing context %s because it has no focus words" % (pId, context))
@@ -465,34 +475,29 @@ class LsaLM:
 
         ### Read Contexts ###############################
         
-        self.condPrint(PrintLevel.GENERAL, "-- Reading contexts") # created with createContexts
+        self.condPrint(PrintLevel.GENERAL, "-- Reading contexts")
         
         rcStart = time.time()
         if self.readContextIndexFile:
             with open(self.testFile, 'r') as f:
                 cidx = 0
                 for line in f:
+#                    self.condPrint(PrintLevel.GENERAL, "   -->            ")
                     text = line.rstrip()
+#                    self.condPrint(PrintLevel.GENERAL, "   -->     text: %s" % text)
                     ctx = self.getContext(text)
+#                    self.condPrint(PrintLevel.GENERAL, "   -->  context: %s" % ctx)
                     if ctx not in self.contextIndex:  
                         self.contextIndex[ctx] = cidx
                         cidx += 1
-                        
-                        pctx = ctx.replace('\t', ' ').rstrip()
-                        pidx = self.pcontextIndex.get(pctx, None)
-                        if pidx is not None:
-                            self.contextPcontext[cidx] = pidx
  
-                    fw = self.getFocusWord(text)
                     idx = self.contextIndex[ctx]
-                    a = self.contextFocusWords.get(idx, [])
+                    a = self.contextWithTexts.get(idx, [])
                     
-                    fwTuple = self.id2word.doc2bow(fw.split())
+                    fwTuple = self.id2word.doc2bow(self.getFocusWord(text).split())
                     if fwTuple:
-                        a.append(fwTuple[0][0])
-                        self.contextFocusWords[idx] = a  
-                    
-      
+                        a.append(text)
+                        self.contextWithTexts[idx] = a                    
         else:
             self.condPrint(PrintLevel.NORMAL, Fore.RED + "You have to provide a train file at this stage")
             sys.exit(3)
@@ -519,7 +524,8 @@ class LsaLM:
         
         if self.testFile:
             for context in self.contextIndex.keys():
-                 contextQueue.put(context)
+#                self.condPrint(PrintLevel.GENERAL, "QUEUEING: %s" % context)
+                contextQueue.put(context)
                 
         for _ in contextProcesses:
             contextQueue.put(None)
