@@ -264,9 +264,28 @@ class LsaLM:
             
             #self.condPrint(PrintLevel.GENERAL, "   -- [%d] context (%s): %s" % (pId, cIdx context))
             
+           
+            
+            
+            
             texts = self.contextWithTexts.get(cIdx, [])
-            if cIdx is not None and len(texts) > 0:
+            validPB = False
+            for text in texts: # we can also put this check somewhat higher, so we don't compute PL for the cat's ass                                
+                pIdx = self.pcontextIndex.get(self.getPcontext(text), None)
+                
+                if pIdx is not None:
+                    validPB = True
+                    break
+            
+            
+            if cIdx is not None and len(texts) > 0 and validPB:
                 self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context (%d) %s" % (pId, cIdx, context))
+
+                
+
+
+
+
 
                 cIdx = int(cIdx)
 
