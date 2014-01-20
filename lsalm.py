@@ -257,15 +257,26 @@ class LsaLM:
             context = queue.get()
             if not context:
                 return       
-   
+  
+            self.condPrint(PrintLevel.GENERAL, "-----")
+
+            self.condPrint(PrintLevel.GENERAL, "   -- [%d] context: %s" % (pId, context))
+
             cIdx = self.contextIndex.get(context, None) 
             
-            pcontext = context.replace('\t', ' ').rstrip()
+            self.condPrint(PrintLevel.GENERAL, "   -- [%d] cIdx (%s)" % (pId, cIdx))
+            
+            pcontext = self.getPcontext(context)
+
+            self.condPrint(PrintLevel.GENERAL, "   -- [%d] pcontext: %s" % (pId, pcontext))
+
             pIdx = self.pcontextIndex.get(pcontext, None) 
+            
+            self.condPrint(PrintLevel.GENERAL, "   -- [%d] pIdx (%s)" % (pId, pIdx))
  
             focusWords = self.contextFocusWords.get(cIdx, [])
             if cIdx is not None and pIdx is not None and len(focusWords) > 0:
-                #self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context (%d) %s" % (pId, cIdx, context))
+                self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context (%d) %s" % (pId, cIdx, context))
 
                 cIdx = int(cIdx)
                 pIdx = int(pIdx)
@@ -510,10 +521,6 @@ class LsaLM:
             for context in self.contextIndex.keys():
                  contextQueue.put(context)
                 
-            #    self.condPrint(PrintLevel.STEPS, "   %d test instances on the queue" % testInstances)    
-                    
-        
-
         for _ in contextProcesses:
             contextQueue.put(None)
 

@@ -29,6 +29,12 @@ class LsaLMC3(LsaLM):
         rightContext = ''
         return leftContext + '\t' + rightContext
     
+    def getPcontext(self, text):
+        words = text.split()
+        leftContext = ' '.join(itemgetter(0,2)(words.split()))
+        rightContext = ''
+        return leftContext + ' ' + rightContext
+    
     def getFocusWord(self, text):
         words = text.split()
         return words[1]
