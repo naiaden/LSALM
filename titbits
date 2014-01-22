@@ -1,0 +1,31 @@
+N3 op fluttershy
+contexts maken
+cut -f1,2 -d' ' dev-3/dev-3.eval | sort -u > dev-3/dev-N3.cxp
+
+context probs berekenen:
+python createContexts.py -c dev-3/dev-N3.cxp -v 20k.vocab -I dev-3/N3Contexts.index -C dev-3/N3Contexts
+
+ngramkansen bepalen:
+for i in {0..50000}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/N3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/N3-SRILMprobs/context.{} '
+for i in {50000..100000}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/N3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/N3-SRILMprobs/context.{} '
+for i in {100000..144577}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/N3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/N3-SRILMprobs/context.{} '
+
+p, pl, en pb bepalen
+python lsaN3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -t dev-3/dev-3.eval -s dev-3/dev-N3.out
+
+####################################################################################################
+
+C3 op pipsqueak
+contexts maken
+cut -f1,3 -d' ' dev-3/dev-3.eval | sort -u > dev-3/dev-C3.cxp
+
+context probs berekenen:
+python createContexts.py -c dev-3/dev-C3.cxp -v 20k.vocab -I dev-3/C3Contexts.index -C dev-3/C3Contexts
+
+ngramkansen bepalen:
+for i in {0..140000}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
+for i in {140000..280000}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
+for i in {280000..434041}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
+
+p, pl, en pb bepalen
+python lsaC3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/C3Contexts.index -S dev-3/N3-SRILMprobs -t dev-3/dev-3.eval -s dev-3/dev-C3.out
