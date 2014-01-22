@@ -1,4 +1,8 @@
-N3 op fluttershy
+N3 #################################################################################################
+
+development set maken
+met ngram-count
+
 contexts maken
 cut -f1,2 -d' ' dev-3/dev-3.eval | sort -u > dev-3/dev-N3.cxp
 
@@ -13,6 +17,31 @@ for i in {100000..144577}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -pp
 p, pl, en pb bepalen
 python lsaN3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -t dev-3/dev-3.eval -s dev-3/dev-N3.out
 
+R ##################################################################################################
+
+development set maken
+todo
+
+contexts maken
+cut -f1 -d' ' dev-2/dev-2.eval | sort -u > dev-2/dev-R.cxp
+
+p, pl, en pb bepalen
+python lsaR.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-2/RContexts.index -S dev-2/R-SRILMprobs -t dev-2/dev-2.eval -s dev-2/dev-R.out
+
+R3 #################################################################################################
+
+contexts en ngramkansen gebruiken van N3
+
+p, pl, en pb bepalen
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-3/dev-3.eval -s dev-3/dev-R3.out
+
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf100.eval -s dev-n/dev-n.m2.shuf100.out
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf500.eval -s dev-n/dev-n.m2.shuf500.out
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf1000.eval -s dev-n/dev-n.m2.shuf1000.out
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf5000.eval -s dev-n/dev-n.m2.shuf5000.out
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf10000.eval -s dev-n/dev-n.m2.shuf10000.out
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf50000.eval -s dev-n/dev-n.m2.shuf50000.out
+python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf100000.eval -s dev-n/dev-n.m2.shuf100000.out
 ####################################################################################################
 
 C3 op pipsqueak
