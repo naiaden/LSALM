@@ -339,7 +339,7 @@ class LsaLM:
                         
                                 logprob = float(logprob)
                         
-                                PB = math.exp(logprob)                            
+                                PB = pow(10, logprob)                            
                                 PBCache[focusWord] = PB     
                                 sumPB += PB                                      
         
@@ -358,10 +358,10 @@ class LsaLM:
                         fwId = self.id2word.doc2bow(fw.split())[0][0]
                         
                         
-#                        self.condPrint(PrintLevel.GENERAL, "    text: %s" % (text))
-#                        self.condPrint(PrintLevel.GENERAL, " context: %s (%d)" % (context, cIdx))
-#                        self.condPrint(PrintLevel.GENERAL, "pcontext: %s (%d)" % (pcontext, pIdx))
-#                        self.condPrint(PrintLevel.GENERAL, "   focus: %s (%d)" % (fw, fwId))
+                        self.condPrint(PrintLevel.EVERYTHING, "    text: %s" % (text))
+                        self.condPrint(PrintLevel.EVERYTHING, " context: %s (%d)" % (context, cIdx))
+                        self.condPrint(PrintLevel.EVERYTHING, "pcontext: %s (%d)" % (pcontext, pIdx))
+                        self.condPrint(PrintLevel.EVERYTHING, "   focus: %s (%d)" % (fw, fwId))
 
 
 #                        self.condPrint(PrintLevel.GENERAL, ">>>>>> %s (%s)" % (fw, fwId))
