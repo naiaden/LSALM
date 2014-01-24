@@ -263,29 +263,18 @@ class LsaLM:
             cIdx = self.contextIndex.get(context, None) 
             
             #self.condPrint(PrintLevel.GENERAL, "   -- [%d] context (%s): %s" % (pId, cIdx context))
-            
-           
-            
-            
-            
+
             texts = self.contextWithTexts.get(cIdx, [])
             validPB = False
-            for text in texts: # we can also put this check somewhat higher, so we don't compute PL for the cat's ass                                
+            for text in texts: # to prevent from computing PL if there is no valid PB                            
                 pIdx = self.pcontextIndex.get(self.getPcontext(text), None)
                 
                 if pIdx is not None:
                     validPB = True
                     break
-            
-            
+                      
             if cIdx is not None and len(texts) > 0 and validPB:
                 self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context (%d) %s" % (pId, cIdx, context))
-
-                
-
-
-
-
 
                 cIdx = int(cIdx)
 
@@ -317,7 +306,7 @@ class LsaLM:
                     #self.condPrint(PrintLevel.GENERAL, "%.16f -> %.16f by: %s" % (PLestCache[wId], PL, self.id2word[wId]))    
                     PLCache[wId] = PL
             
-                for text in texts: # we can also put this check somewhat higher, so we don't compute PL for the cat's ass                  
+                for text in texts:               
                 
                     pcontext = self.getPcontext(text)
                     pIdx = self.pcontextIndex.get(pcontext, None)
@@ -333,13 +322,12 @@ class LsaLM:
 
                         with open("%s/context.%d" % (self.srilmProbsDirectory, pIdx), 'r') as f:
                             for line in f:
-                                ltext, logprob = line.rstrip().split('\t')
+                                ltext, PB = line.rstrip().split('\t')
                         
                                 focusWord = self.getFocusWord(ltext)
-                        
-                                logprob = float(logprob)
-                        
-                                PB = pow(10, logprob)                            
+                           
+                                PB = float(PB)
+                           
                                 PBCache[focusWord] = PB     
                                 sumPB += PB                                      
         
@@ -525,37 +513,38 @@ class LsaLM:
 
         ### Process Contexts ############################
 
-        self.condPrint(PrintLevel.GENERAL, "-- Processing contexts (in parallel)")
-        
-        cpStart = time.time()
-        
-        contextQueue = Queue()
-        contextProcesses = []
-        
-        writeQueue = Queue()
-        writeProcess = Process(target=self.writeToFile, args=(writeQueue,))
-        writeProcess.start()
-
-        for i in range(self.threads):
-            process = Process(target=self.processContext, args=(i,contextQueue,writeQueue))
-            contextProcesses.append(process)
-            process.start()
-        
         if self.testFile:
+            self.condPrint(PrintLevel.GENERAL, "-- Processing contexts (in parallel)")
+            
+            cpStart = time.time()
+        
+            contextQueue = Queue()
+            contextProcesses = []
+        
+            writeQueue = Queue()
+            writeProcess = Process(target=self.writeToFile, args=(writeQueue,))
+            writeProcess.start()
+
+            for i in range(self.threads):
+                process = Process(target=self.processContext, args=(i,contextQueue,writeQueue))
+                contextProcesses.append(process)
+                process.start()
+        
+        
             for context in self.contextIndex.keys():
-#                self.condPrint(PrintLevel.GENERAL, "QUEUEING: %s" % context)
+    #                self.condPrint(PrintLevel.GENERAL, "QUEUEING: %s" % context)
                 contextQueue.put(context)
                 
-        for _ in contextProcesses:
-            contextQueue.put(None)
+            for _ in contextProcesses:
+                contextQueue.put(None)
 
-        for process in contextProcesses:
-            process.join()
+            for process in contextProcesses:
+                process.join()
             
-        writeQueue.put(None)
-        writeProcess.join()
+            writeQueue.put(None)
+            writeProcess.join()
 
-        self.condPrint(PrintLevel.TIME, " - Processing contexts took %f seconds" % (time.time() - cpStart))
-        self.condPrint(PrintLevel.STEPS, "<  Done processing contexts")
+            self.condPrint(PrintLevel.TIME, " - Processing contexts took %f seconds" % (time.time() - cpStart))
+            self.condPrint(PrintLevel.STEPS, "<  Done processing contexts")
 
 

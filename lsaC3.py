@@ -25,14 +25,14 @@ class LsaLMC3(LsaLM):
   
     def getContext(self, text):
         words = text.split()
-        leftContext = ' '.join(itemgetter(0,2)(words.split()))
-        rightContext = ''
+        leftContext = words[0]
+        rightContext = words[2]
         return leftContext + '\t' + rightContext
     
     def getPcontext(self, text):
         words = text.split()
-        leftContext = ' '.join(itemgetter(0,2)(words.split()))
-        rightContext = ''
+        leftContext = words[0]
+        rightContext = words[2]
         return leftContext + ' ' + rightContext
     
     def getFocusWord(self, text):
@@ -47,7 +47,7 @@ class LsaLMC3(LsaLM):
         n1Tuple = self.id2word.doc2bow(words[0].split())
         n3Tuple = self.id2word.doc2bow(words[2].split())
         if n1Tuple and n3Tuple:
-            n1Id = n3Tuple[0][0]
+            n1Id = n1Tuple[0][0]
             n1Projection = self.lsi.projection.u[n1Id]
             n3Id = n3Tuple[0][0]
             n3Projection = self.lsi.projection.u[n3Id]
