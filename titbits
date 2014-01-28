@@ -33,15 +33,17 @@ R3 #############################################################################
 contexts en ngramkansen gebruiken van N3
 
 p, pl, en pb bepalen
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-3/dev-3.eval -s dev-3/dev-R3.out
+python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.eval -o dev-n/dev-n.mt2.out
 
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf100.eval -s dev-n/dev-n.m2.shuf100.out
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf500.eval -s dev-n/dev-n.m2.shuf500.out
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf1000.eval -s dev-n/dev-n.m2.shuf1000.out
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf5000.eval -s dev-n/dev-n.m2.shuf5000.out
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf10000.eval -s dev-n/dev-n.m2.shuf10000.out
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf50000.eval -s dev-n/dev-n.m2.shuf50000.out
-python lsaR3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/R3Contexts.index -S dev-3/R3-SRILMprobs -t dev-n/dev-n.m2.shuf100000.eval -s dev-n/dev-n.m2.shuf100000.out
+time python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.shuf100.eval -o dev-n/dev-n.mt2.shuf100.out
+time python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.shuf500.eval -o dev-n/dev-n.mt2.shuf500.out
+time python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.shuf1000.eval -o dev-n/dev-n.mt2.shuf1000.out
+time python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.shuf5000.eval -o dev-n/dev-n.mt2.shuf5000.out
+time python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.shuf10000.eval -o dev-n/dev-n.mt2.shuf10000.out
+time python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.shuf50000.eval -o dev-n/dev-n.mt2.shuf50000.out
+time python lsaR3.py -T 28 -g 1.0 -k 300 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -s dev-3/N3Contexts.index -S dev-3/N3-SRILMprobs -i dev-n/dev-n.mt2.shuf10000.eval -o dev-n/dev-n.mt2.shuf10000.out
+
+
 ####################################################################################################
 
 C3 op pipsqueak
@@ -52,9 +54,9 @@ context probs berekenen:
 python createContexts.py -c dev-3/dev-C3.cxp -v 20k.vocab -I dev-3/C3Contexts.index -C dev-3/C3Contexts
 
 ngramkansen bepalen:
-for i in {0..140000}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
-for i in {140000..280000}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
-for i in {280000..434041}; do echo $i; done | xargs -P 24 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
+for i in {0..140000}; do echo $i; done | xargs -P 28 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
+for i in {140000..280000}; do echo $i; done | xargs -P 28 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
+for i in {280000..434041}; do echo $i; done | xargs -P 28 -I {} sh -c 'ngram -ppl dev-3/C3Contexts/context.{} -lm train.lm -debug 2 -no-sos -no-eos | python interpretSRILM.py > dev-3/C3-SRILMprobs/context.{} '
 
 p, pl, en pb bepalen
 python lsaC3.py -I 28 -m train.mm -d train.dict -v 3 -r train-1-300-fc.lsa -c train-1-300-fc.wc -l train-1-300-fc.lc -y dev-3/C3Contexts.index -S dev-3/N3-SRILMprobs -t dev-3/dev-3.eval -s dev-3/dev-C3.out
