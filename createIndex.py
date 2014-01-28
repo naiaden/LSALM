@@ -78,14 +78,17 @@ def createCountsFor(tokFile):
     call(["ngram-count", "-text", tokFile, "-order", str(order), "-no-sos", "-no-eos", "-write", countOutputFile, "-gt1min", "0", "-gt2min", "0", "-gt3min", "0", "-gt4min", "0", "-gt5min", "0"])
     inputFiles.append(countOutputFile)
 
+def window(fseq, window_size=3):
+    for i in xrange(len(fseq) - window_size + 1):
+            yield fseq[i:i+window_size]
+
 def createEvaluationFile():
     with open(evaluationOutputFile, 'w') as eof:
-        for inputFile in inputFiles:
+        for inputFile in generateCountsFor:
             with open(inputFile, 'r') as f:
                 for line in f:
-                    ngram = line.split('\t')[0]
-                    if len(ngram.split()) == order:
-                        eof.write("%s\n" % ngram)
+                    for seq in window(line.rstrip().split(), order):
+                        eof.write("%s\n" % ' '.join(seq))
 
 def createSentenceHistories():
     with open(evaluationOutputFile, 'w') as eof:
@@ -132,6 +135,25 @@ for (opt, arg) in opts:
     elif opt in ('-v', '--verbose'):
         verbosity = int(arg)
 
+### Evaluation output ###########################
+
+if evaluationOutputFile:
+    condPrint(2, ">  Processing evaluation output file")
+    if order == 'n':
+        condPrint(2, " - Creating sentence histories")
+        createSentenceHistories()
+    else:
+        condPrint(2, " - Creating evaluation file")
+        order = int(order)
+        createEvaluationFile()
+    condPrint(2, "<  Done processing evaluation output file")
+
+    if evaluateonly:
+        condPrint(2, "-- Evaluate only mode enabled. Done")
+        sys.exit()
+else:
+    condPrint(2, "-- Skipping evaluation output")
+
 ### Generate count files ########################
 
 if isinstance(int(order), (int, long)):
@@ -156,24 +178,6 @@ condPrint(2, "-- Counts directory: %s" % countOutputDirectory)
 condPrint(2, "-- Number of input files: %d" % len(inputFiles))
 condPrint(2, "-- Number of input files to process: %d" % len(generateCountsFor))
 condPrint(2, "-- Verbosity level: %d" % verbosity)
-
-### Evaluation output ###########################
-
-if evaluationOutputFile:
-    condPrint(2, ">  Processing evaluation output file")
-    if order == 'n':
-        condPrint(2, " - Creating sentence histories")
-        createSentenceHistories()
-    else:
-        condPrint(2, " - Creating evaluation file")
-        createEvaluationFile()
-    condPrint(2, "<  Done processing evaluation output file")
-
-    if evaluateonly:
-        condPrint(2, "-- Evaluate only mode enabled. Done")
-        sys.exit()
-else:
-    condPrint(2, "-- Skipping evaluation output")
 
 ### Vocabulary ##################################
 
