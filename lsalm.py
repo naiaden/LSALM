@@ -262,15 +262,18 @@ class LsaLM:
 
             cIdx = self.contextIndex.get(context, None) 
             
-            #self.condPrint(PrintLevel.GENERAL, "   -- [%d] context (%s): %s" % (pId, cIdx context))
+            self.condPrint(PrintLevel.GENERAL, "   -- [%d] context (%s): %s" % (pId, cIdx, context))
 
             texts = self.contextWithTexts.get(cIdx, [])
+            print texts
+            
             validPB = False
             for text in texts: # to prevent from computing PL if there is no valid PB                            
                 pIdx = self.pcontextIndex.get(self.getPcontext(text), None)
                 
                 if pIdx is not None:
                     validPB = True
+                    print "jeej"
                     break
                       
             if cIdx is not None and len(texts) > 0 and validPB:
@@ -504,7 +507,7 @@ class LsaLM:
                     fwTuple = self.id2word.doc2bow(self.getFocusWord(text).split())
                     if fwTuple:
                         a.append(text)
-                        self.contextWithTexts[idx] = a                    
+                        self.contextWithTexts[idx] = a                 
         else:
             self.condPrint(PrintLevel.NORMAL, Fore.RED + "You have to provide a train file at this stage")
             sys.exit(3)
@@ -544,7 +547,7 @@ class LsaLM:
             writeQueue.put(None)
             writeProcess.join()
 
-            self.condPrint(PrintLevel.TIME, " - Processing contexts took %f seconds" % (time.time() - cpStart))
+            self.condPrint(PrintLevel.TIME, " - Processing %d contexts took %f seconds" % (len(self.contextIndex), time.time() - cpStart))
             self.condPrint(PrintLevel.STEPS, "<  Done processing contexts")
 
 

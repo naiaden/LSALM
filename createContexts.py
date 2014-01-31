@@ -3,6 +3,8 @@ import getopt
 from threading import Thread
 from multiprocessing import Process, Pool, Queue
 
+threads = 24
+
 contextsFile = 'dev-N3.cxp'
 contextsIndex = 'N3C.index'
 contextsDir = 'N3C'
@@ -23,7 +25,7 @@ def printNumber(pId, queue):
                 f.write("%s %s %s\n" % (l, word, r))
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], 'c:v:I:C:', ['contextfile=', 'vocabulary=', 'index=', 'contextdir='])
+    opts, args = getopt.getopt(sys.argv[1:], 'c:v:I:C:T:', ['contextfile=', 'vocabulary=', 'index=', 'contextdir=', 'threads='])
 except getopt.GetoptError:
     print "Invalid arguments"
     sys.exit(2)
@@ -37,11 +39,14 @@ for (opt, arg) in opts:
         contextsIndex = arg
     elif opt in ('-C', '--contextdir'):
         contextsDir = arg
+    elif opt in ('-T', '--threads'):
+        threads = int(arg)
 
 print "contexts: %s" % contextsFile
 print "index: %s" % contextsIndex
 print "c-dir: %s" % contextsDir
 print "vocabulary: %s" % vocabularyFile
+print "threads: %d" % threads
 
 with open(vocabularyFile, 'r') as f:
     for line in f:
@@ -51,7 +56,7 @@ with open(vocabularyFile, 'r') as f:
 q = Queue()
 
 processes = []
-for i in range(30):
+for i in range(threads):
     process = Process(target=printNumber, args=(i, q,))
     processes.append(process)
     process.start()
@@ -73,7 +78,7 @@ with open(contextsFile, 'r') as f:
         q.put((lContext, rContext, lineNr))
         d = lineNr
 
-print d
+print "Put %d contexts on the queue" % d
 
 for _ in processes:
     q.put((None, None, None))
@@ -81,10 +86,12 @@ for _ in processes:
 for process in processes:
     process.join()  
 
-print "Done"
+print "Done with processing"
 
 
 ci = open(contextsIndex, 'w')
 for k,v in contexts.iteritems():
     ci.write("%d %s\n" % (v,k))
 ci.close()
+
+print "Done writing the index file"

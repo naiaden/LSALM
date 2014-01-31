@@ -43,7 +43,12 @@ for lineNr, line in enumerate(sys.stdin):
             break
         if case(2): # n-gram probabilities
             if line.startswith('\tp('):
-                prob = line.split('gram] ')[1].split(' [ ')[0]
+                try:
+                    prob = line.split('gram] ')[1].split(' [ ')[0]
+                except IndexError:
+                    #print "This line: (%d) %s" % (lineNr, line)
+                    #print("This line: (%d) %s" % (lineNr, line), end='\n', file=sys.stderr)
+                    prob = 0
                 break
             else:
                 phase = 3
