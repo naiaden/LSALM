@@ -28,7 +28,7 @@ class LsaLMN3(LsaLM):
         rightContext = ''
         return leftContext + '\t' + rightContext
    
-    def getPcontext(self, text):
+    def getPcontext(self, text, source="sentence"):
         words = text.split()
         leftContext = ' '.join(words[0:2])
         rightContext = ''

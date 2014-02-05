@@ -16,17 +16,24 @@ from lsalm import LsaLM
 from lsalm import PrintLevel
 from colorama import init, Fore, Back, Style
 
-class LsaLMR(LsaLM):
+class LsaLMR2(LsaLM):
   
     def getContext(self, text):
         words = text.split()
         leftContext = ' '.join(words[0:-2])
         return leftContext + '\t'
    
-    def getPcontext(self, text):
-        words = text.split()
-        leftContext = ' '.join(words[-2:-1])
-        return leftContext
+    def getPcontext(self, text, source="sentence"):
+        if source == "sentence":
+            words = text.split()
+            leftContext = ' '.join(words[-2:-1])
+            return leftContext
+        elif source == "pcontext":
+            words = text.split()
+            leftContext = ' '.join(words[0:1])
+            rightContext = ''
+            pcontext = leftContext + ' ' + rightContext
+            return pcontext.rstrip()
 
     def getFocusWord(self, text):
         words = text.split()
@@ -54,5 +61,5 @@ class LsaLMR(LsaLM):
             return centroid
 
 
-lm = LsaLMR(sys.argv[1:])
+lm = LsaLMR2(sys.argv[1:])
 lm.buildSpace()

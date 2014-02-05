@@ -23,10 +23,17 @@ class LsaLMR(LsaLM):
         leftContext = ' '.join(words[0:-2])
         return leftContext + '\t'
    
-    def getPcontext(self, text):
-        words = text.split()
-        leftContext = ' '.join(words[-3:-1])
-        return leftContext
+    def getPcontext(self, text, source="sentence"):
+        if source == "sentence":
+            words = text.split()
+            leftContext = ' '.join(words[-3:-1])
+            return leftContext
+        elif source == "pcontext":
+            words = text.split()
+            leftContext = ' '.join(words[0:2])
+            rightContext = ''
+            pcontext = leftContext + ' ' + rightContext
+            return pcontext.rstrip()
 
     def getFocusWord(self, text):
         words = text.split()

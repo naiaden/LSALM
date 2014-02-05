@@ -49,6 +49,8 @@ class LsaLM:
     programIdentifier = ''
     threads = 24
     
+    interpolation = "geometric"
+    
     distributed = False
     mmfile = 'markovmarket'
     dictfile = 'dictionary'
@@ -152,7 +154,7 @@ class LsaLM:
 
     def __init__(self, cmdArgs):
         try:
-            opts, args = getopt.getopt(cmdArgs, 'hI:T:Dm:d:v:r:w:c:C:l:L:s:S:i:o:g:k:', ['help', 'id=', 'threads=', 'distributed', 'mfile=', 'dfile=', 'gamma=', 'dimensions=', 'test=', 'read=', 'write=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'srilm=', 'contextindex='])
+            opts, args = getopt.getopt(cmdArgs, 'hI:T:Dm:d:v:r:w:c:C:l:L:s:S:i:o:g:k:', ['help', 'id=', 'threads=', 'distributed', 'mfile=', 'dfile=', 'gamma=', 'dimensions=', 'test=', 'read=', 'write=', 'save=', 'verbosity=', 'readcount=', 'writecount=', 'readlsaconf=', 'writelsaconf=', 'srilm=', 'contextindex=', 'linear'])
         except getopt.GetoptError:
             self.printHelp()
             sys.exit(2)
@@ -204,6 +206,8 @@ class LsaLM:
                 self.gamma = float(arg)
             elif opt in ('-k', '--dimensions'):
                 self.dimensions = arg
+            elif opt in ('--linear'):
+                self.interpolation = "linear"
        
         init(autoreset=True)
 
@@ -262,21 +266,12 @@ class LsaLM:
 
             cIdx = self.contextIndex.get(context, None) 
             
-            self.condPrint(PrintLevel.GENERAL, "   -- [%d] context (%s): %s" % (pId, cIdx, context))
+            #self.condPrint(PrintLevel.GENERAL, "   -- [%d] context (%s): %s" % (pId, cIdx, context))
 
             texts = self.contextWithTexts.get(cIdx, [])
-            print texts
-            
-            validPB = False
-            for text in texts: # to prevent from computing PL if there is no valid PB                            
-                pIdx = self.pcontextIndex.get(self.getPcontext(text), None)
-                
-                if pIdx is not None:
-                    validPB = True
-                    print "jeej"
-                    break
-                      
-            if cIdx is not None and len(texts) > 0 and validPB:
+            #print texts
+                                 
+            if cIdx is not None and len(texts) > 0:
                 self.condPrint(PrintLevel.GENERAL, "   -- [%d] Processing context (%d) %s" % (pId, cIdx, context))
 
                 cIdx = int(cIdx)
@@ -284,10 +279,14 @@ class LsaLM:
                 ### PL PART ###################################
 
                 contextCentroid = self.getCentroid(context)
-                (minId, minVal, cosSum, plDen) = self.minCos(contextCentroid)          
+                (minId, minVal, cosSum, plDen) = self.minCos(contextCentroid)  
+                
+                #self.condPrint(PrintLevel.GENERAL, "       -- [%d] Processing PL PART (%d) %s" % (pId, cIdx, context))        
             
                 PLestCache = {}
                 sumPLest = 0
+            
+                #print "1"
             
                 for wId in self.id2word:                 
                     wordCos = self.cos(wId, contextCentroid)
@@ -302,6 +301,8 @@ class LsaLM:
 
                 PLCache = {}
             
+                #print "2"
+            
                 for wId in self.id2word:
                     PL = 0
                     if PLestCache.get(wId, None) is not None and sumPLest > 0:
@@ -309,16 +310,27 @@ class LsaLM:
                     #self.condPrint(PrintLevel.GENERAL, "%.16f -> %.16f by: %s" % (PLestCache[wId], PL, self.id2word[wId]))    
                     PLCache[wId] = PL
             
+                #print "3"
+            
                 for text in texts:               
                 
+                    #print "T", text
+                
                     pcontext = self.getPcontext(text)
+                    
+                    #print "P", pcontext
+                    
                     pIdx = self.pcontextIndex.get(pcontext, None)
+                    
+                    #print "p", pIdx
                     
                     if pIdx is not None:
                     
                         pIdx = int(pIdx)
                      
                         ### PB PART ###################################
+                        
+                        #self.condPrint(PrintLevel.GENERAL, "       -- [%d] Processing PB PART (%d) %s" % (pId, pIdx, pcontext)) 
           
                         PBCache = {}
                         sumPB = 0
@@ -341,7 +353,10 @@ class LsaLM:
                             word = self.id2word[wId]
                             PL = PLCache[wId]
                             PB =  PBCache[word]
-                            sumPLPB += pow(PL, lc)*pow(PB, 1-lc)
+                            if self.interpolation == "linear":
+                                sumPLPB += PL*lc + PB* (1-lc)
+                            else:
+                                sumPLPB += pow(PL, lc)*pow(PB, 1-lc)
         
                         ### INTERPOLATION PART ########################
         
@@ -365,7 +380,10 @@ class LsaLM:
                 
                         P = 0
                         if sumPLPB:
-                            P = pow(PL, lc) * pow(PB, 1-lc) / sumPLPB
+                            if self.interpolation == "linear":
+                                P = (PL * lc + PB * (1-lc)) / sumPLPB
+                            else:
+                                P = pow(PL, lc) * pow(PB, 1-lc) / sumPLPB
                 
                         #print fwId, self.id2word[fwId], P
                         queueOut.put("%s\t%.16f\t%.16f\t%.16f\t%.16f" % (text, P, PL, PB, lc))
@@ -473,10 +491,12 @@ class LsaLM:
         if self.readContextIndexFile:
             with open(self.readContextIndexFile, 'r') as f:
                 for line in f:
-                    e = line.rstrip().split()
+                    e = line.rstrip().split(' ', 1)
                     idx = e[0]
-                    pctx = e[1:]
-                    self.pcontextIndex[' '.join(pctx)] = idx
+                    pcontext = self.getPcontext(e[1], "pcontext")
+                    if int(idx) == 213330:
+                        print "%d: >%s< >%s<" % (int(idx), e[1], pcontext)
+                    self.pcontextIndex[pcontext] = idx
         else:
             self.condPrint(PrintLevel.NORMAL, Fore.RED + "You have to provide a pcontext index at this stage")
             sys.exit(3)
