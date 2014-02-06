@@ -295,7 +295,7 @@ class LsaLM:
                         PLest = (wordCos - minVal) / plDen
                     PLestCache[wId] = PLest
                     #self.condPrint(PrintLevel.GENERAL, "%.16f contributed by: %s" % (PLest, self.id2word[wId]))
-                    sumPLest += PLest
+                    sumPLest += pow(PLest, self.gamma)
 
                 #self.condPrint(PrintLevel.GENERAL, "Which sums up to %.16f sumPLest" % (sumPLest))
 
@@ -306,7 +306,7 @@ class LsaLM:
                 for wId in self.id2word:
                     PL = 0
                     if PLestCache.get(wId, None) is not None and sumPLest > 0:
-                        PL = pow(PLestCache[wId], self.gamma) / pow(sumPLest, self.gamma)
+                        PL = pow(PLestCache[wId], self.gamma) / sumPLest
                     #self.condPrint(PrintLevel.GENERAL, "%.16f -> %.16f by: %s" % (PLestCache[wId], PL, self.id2word[wId]))    
                     PLCache[wId] = PL
             
