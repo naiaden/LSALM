@@ -141,3 +141,13 @@ for evalset in 0; do for gamma in `seq 0.00 0.05 2.5`; do for dimensions in 400;
 ```bash
 paste <(for i in `seq 0.00 0.05 2.50`; do echo $i; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f2 dev-n/out/dev-R2-$i-400-0-fc.out | ppl | cut -f2 -d' '; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f3 dev-n/out/dev-R2-$i-400-0-fc.out | ppl | cut -f2 -d' '; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f4 dev-n/out/dev-R2-$i-400-0-fc.out | ppl | cut -f2 -d' '; done)
 ```
+
+## Idem voor lineaire interpolatie
+```bash
+for evalset in 0; do for gamma in `seq 0.00 0.05 2.5`; do for dimensions in 400; do python lsaR2.py -D -k $dimensions -g $gamma -T 28 -m train.mm -d train.dict -v 1 -r lsa/train-$gamma-$dimensions-fc.lsa -c lsa/train-$gamma-$dimensions-fc.wc -l lsa/train-$gamma-$dimensions-fc.lc -i dev-n/shuf/dev-R2.shuf2500-$evalset.eval -s dev-2/dev-N2.all.idx -S dev-2/N2SRILMProbs --linear -o dev-n/out/dev-R2-$gamma-$dimensions-$evalset-fc.lin.out; done; done; done
+```
+
+## Lin PPL
+```bash
+paste <(for i in `seq 0.00 0.05 2.50`; do echo $i; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f2 dev-n/out/dev-R2-$i-400-0-fc.lin.out | ppl | cut -f2 -d' '; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f3 dev-n/out/dev-R2-$i-400-0-fc.lin.out | ppl | cut -f2 -d' '; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f4 dev-n/out/dev-R2-$i-400-0-fc.lin.out | ppl | cut -f2 -d' '; done)
+```
