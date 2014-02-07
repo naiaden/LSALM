@@ -35,6 +35,12 @@ python createIndex.py -o 5 -e dev-5/dev-5.all.eval -E -l dev.files
 python createIndex.py -o n -e dev-n/dev-n.all.eval -E -l dev.files
 ```
 
+## De huge-grammen voor verschillende contextlengtes
+
+```bash
+for csize in 5 10 25 50 100 250 500; do awk -v r=$csize '{if(NF > 2 && NF < (r+1)) {print $0}}' dev-n/dev-n.eval > dev-n/dev-n.c$csize.eval; done
+```
+
 ## Alle contexten bepalen
 ```bash
 awk '{print $1 "     "}' dev-2/dev-2.all.eval | sort -u > dev-2/dev-N2.all.cxp
@@ -86,6 +92,8 @@ awk '{if(NF > 2) print $0}' dev-n/dev-n.all.eval > dev-n/dev-R2.all.eval
 awk '{if(NF > 3) print $0}' dev-n/dev-n.all.eval > dev-n/dev-R3.all.eval
 
 for evalset in `seq 0 10`; do shuf -n 2500 dev-n/dev-R2.all.eval > dev-n/shuf/dev-R2.shuf2500-$evalset.eval; shuf -n 2500 dev-n/dev-R3.all.eval > dev-n/shuf/dev-R3.shuf2500-$evalset.eval; done
+
+for csize in 5 10 25 50 100 250 500; do for evalset in `seq 0 10`; do shuf -n 2500 dev-n/dev-n.c$csize.eval > dev-n/shuf/dev-n.shuf2500-c$csize-$evalset.eval; done; done
 ```
 
 # Reproductie R3
