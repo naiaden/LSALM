@@ -95,8 +95,8 @@ class LsaLM:
         return result
     
     def minCos(self,contextCentroid):
-        minVal = 0
-        minId = 0
+        minVal = self.cos(1, contextCentroid)
+        minId = 1
         cosSum = 0
         for wId in self.id2word:
             val = self.cos(wId, contextCentroid)
@@ -256,6 +256,12 @@ class LsaLM:
                     return       
                 print text
             
+    def interpolate(self, a, b, f, metric="linear"):
+        if metric == "geometric":
+            return pow(a, f) * pow(b, 1-f)
+        else:
+            return a*f + b*(1-f)
+            
     def processContext(self, pId, queue, queueOut):
         while True:
             context = queue.get()
@@ -296,6 +302,8 @@ class LsaLM:
                     PLestCache[wId] = PLest
                     #self.condPrint(PrintLevel.GENERAL, "%.16f contributed by: %s" % (PLest, self.id2word[wId]))
                     sumPLest += pow(PLest, self.gamma)
+
+                #self.condPrint(PrintLevel.GENERAL, "sumPLest: %f" % sumPLest, addPrefix=False)
 
                 #self.condPrint(PrintLevel.GENERAL, "Which sums up to %.16f sumPLest" % (sumPLest))
 
@@ -353,10 +361,7 @@ class LsaLM:
                             word = self.id2word[wId]
                             PL = PLCache[wId]
                             PB =  PBCache[word]
-                            if self.interpolation == "linear":
-                                sumPLPB += PL*lc + PB* (1-lc)
-                            else:
-                                sumPLPB += pow(PL, lc)*pow(PB, 1-lc)
+                            sumPLPB += self.interpolate(PL, PB, lc, self.interpolation)
         
                         ### INTERPOLATION PART ########################
         
@@ -380,10 +385,7 @@ class LsaLM:
                 
                         P = 0
                         if sumPLPB:
-                            if self.interpolation == "linear":
-                                P = (PL * lc + PB * (1-lc)) / sumPLPB
-                            else:
-                                P = pow(PL, lc) * pow(PB, 1-lc) / sumPLPB
+                            P = self.interpolate(PL, PB, lc, self.interpolation) / sumPLPB
                 
                         #print fwId, self.id2word[fwId], P
                         queueOut.put("%s\t%.16f\t%.16f\t%.16f\t%.16f" % (text, P, PL, PB, lc))
