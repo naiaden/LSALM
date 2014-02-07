@@ -151,3 +151,69 @@ for evalset in 0; do for gamma in `seq 0.00 0.05 2.5`; do for dimensions in 400;
 ```bash
 paste <(for i in `seq 0.00 0.05 2.50`; do echo $i; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f2 dev-n/out/dev-R2-$i-400-0-fc.lin.out | ppl | cut -f2 -d' '; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f3 dev-n/out/dev-R2-$i-400-0-fc.lin.out | ppl | cut -f2 -d' '; done) <(for i in `seq 0.00 0.05 2.50`; do cut -f4 dev-n/out/dev-R2-$i-400-0-fc.lin.out | ppl | cut -f2 -d' '; done)
 ```
+
+Bereken het minimum, maximum, en het gemiddelde voor 1 devsetsample, voor p, pl en pb
+```bash
+paste <(for i in `seq 0.00 0.05 2.50`; do echo $i; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f2 dev-n/out/dev-R2-$i-400-$j-fc.lin.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}'; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f3 dev-n/out/dev-R2-$i-400-$j-fc.lin.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f4 dev-n/out/dev-R2-$i-400-$j-fc.lin.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) > dev-n/data/minmaxavgLinear.R2.dat
+
+paste <(for i in `seq 0.00 0.05 2.50`; do echo $i; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f2 dev-n/out/dev-R2-$i-400-$j-fc.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}'; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f3 dev-n/out/dev-R2-$i-400-$j-fc.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f4 dev-n/out/dev-R2-$i-400-$j-fc.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) > dev-n/data/minmaxavgGeometric.R2.dat
+```
+
+## Plotten die hap
+```gnuplot
+set term x11 1
+set logscale y
+set xlabel "gamma"
+set ylabel "perplexity"
+set title "R2"
+set yrange [1:100000]
+
+plot "minmaxavgGeometric.R2.dat" u 1:4 title "avgGeo" w l linecolor rgb "black", "minmaxavgLinear.R2.dat" u 1:7 title "avg lsalm" w l linecolor rgb "blue", "minmaxavgLinear.R2.dat" u 1:10 title "avg ngram" w l linecolor rgb "blue", "minmaxavgLinear.R2.dat" u 1:4 title "avgLin" w l linecolor rgb "blue"
+```
+
+set term x11 0
+set logscale y
+set xlabel "gamma"
+set ylabel "perplexity"
+set title "R3"
+set yrange [1:100000]
+
+plot "minmaxavgGeometric.R3.dat" u 1:4 title "avgGeo" w l linecolor rgb "black", "minmaxavgLinear.R3.dat" u 1:7 title "avg lsalm" w l linecolor rgb "blue", "minmaxavgLinear.R3.dat" u 1:10 title "avg ngram" w l linecolor rgb "blue", "minmaxavgLinear.R3.dat" u 1:4 title "avgLin" w l linecolor rgb "blue"
+
+
+
+
+# Scratch pad
+
+paste <(for i in `seq 0.00 0.10 0.90`; do echo $i; done) <(for i in `seq 0.00 0.10 0.90`; do ( for j in 0; do cut -f2 dev-n/out/dev-R2-$i-400-$j-fc.lin1.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}'; done) <(for i in `seq 0.00 0.10 0.90`; do ( for j in 0; do cut -f3 dev-n/out/dev-R2-$i-400-$j-fc.lin1.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) <(for i in `seq 0.00 0.10 0.90`; do ( for j in 0; do cut -f4 dev-n/out/dev-R2-$i-400-$j-fc.lin1.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) > dev-n/data/minmaxavgLinear.R2-1.dat
+
+set term x11 2
+set logscale y
+set xlabel "gamma"
+set ylabel "perplexity"
+set title "R3"
+set yrange [1:100000]
+
+plot "minmaxavgLinear.R2-1.dat" u 1:4 title "avgGeo" w l linecolor rgb "black", "minmaxavgLinear.R3.dat" u 1:7 title "avg lsalm" w l linecolor rgb "blue", "minmaxavgLinear.R2-1.dat" u 1:10 title "avg ngram" w l linecolor rgb "red", "minmaxavgLinear.R2-1.dat" u 1:4 title "avgLin" w l linecolor rgb "magenta"
+
+
+paste <(for i in `seq 0.00 0.05 1.50`; do echo $i; done) <(for i in `seq 0.00 0.05 1.50`; do ( for j in 0; do cut -f2 dev-n/out/dev-R2-$i-400-$j-fc.lin3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}'; done) <(for i in `seq 0.00 0.05 1.50`; do ( for j in 0; do cut -f3 dev-n/out/dev-R2-$i-400-$j-fc.lin3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) <(for i in `seq 0.00 0.05 1.50`; do ( for j in 0; do cut -f4 dev-n/out/dev-R2-$i-400-$j-fc.lin3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) > dev-n/data/minmaxavgLinear.R2-3.dat
+
+plot "minmaxavgLinear.R2-3.dat" u 1:4 title "avgGeo" w l linecolor rgb "black", "minmaxavgLinear.R2-3.dat" u 1:7 title "avg lsalm" w l linecolor rgb "blue", "minmaxavgLinear.R2-3.dat" u 1:10 title "avg ngram" w l linecolor rgb "red", "minmaxavgLinear.R2-3.dat" u 1:4 title "avgLin" w l linecolor rgb "magenta"
+
+
+
+
+
+paste <(for i in `seq 0.00 0.05 2.50`; do echo $i; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f2 dev-n/out/dev-R2-$i-400-$j-fc.geo3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}'; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f3 dev-n/out/dev-R2-$i-400-$j-fc.geo3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) <(for i in `seq 0.00 0.05 2.50`; do ( for j in 0; do cut -f4 dev-n/out/dev-R2-$i-400-$j-fc.geo3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) > dev-n/data/minmaxavgGeometric.R2-3.dat
+
+plot "minmaxavgGeometric.R2-3.dat" u 1:4 title "avgGeo" w l linecolor rgb "black", "minmaxavgLinear.R2-3.dat" u 1:7 title "avg lsalm" w l linecolor rgb "blue", "minmaxavgLinear.R2-3.dat" u 1:10 title "avg ngram" w l linecolor rgb "red", "minmaxavgLinear.R2-3.dat" u 1:4 title "avgLin" w l linecolor rgb "magenta"
+
+
+
+
+
+
+paste <(for i in `seq 0.00 1.00 11.00`; do echo $i; done) <(for i in `seq 0.00 1.00 11.00`; do ( for j in 0; do cut -f2 dev-n/out/dev-R2-$i-400-$j-fc.lin3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}'; done) <(for i in `seq 0.00 1.00 11.00`; do ( for j in 0; do cut -f3 dev-n/out/dev-R2-$i-400-$j-fc.lin3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) <(for i in `seq 0.00 1.00 11.00`; do ( for j in 0; do cut -f4 dev-n/out/dev-R2-$i-400-$j-fc.lin3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) > dev-n/data/minmaxavgLinear.R2-31.dat
+
+paste <(for i in `seq 0.00 1.00 11.00`; do echo $i; done) <(for i in `seq 0.00 1.00 11.00`; do ( for j in 0; do cut -f2 dev-n/out/dev-R2-$i-400-$j-fc.geo3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}'; done) <(for i in `seq 0.00 1.00 11.00`; do ( for j in 0; do cut -f3 dev-n/out/dev-R2-$i-400-$j-fc.geo3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) <(for i in `seq 0.00 1.00 11.00`; do ( for j in 0; do cut -f4 dev-n/out/dev-R2-$i-400-$j-fc.geo3.out | ppl | cut -f2 -d' '; done ) | awk 'NR == 1 { max=$1; min=$1; sum=0 } { if ($1>max) max=$1; if ($1<min) min=$1; sum+=$1;} END {printf "%f\t%f\t%f\n", min, max, sum/NR}' ; done) > dev-n/data/minmaxavgGeometric.R2-31.dat
